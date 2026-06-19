@@ -1,5 +1,5 @@
-import { ComponentExample } from "@/components/component-example";
+import { SquatCoachApp } from "@/components/squat-coach-app";
 
 export default function Page() {
-return <ComponentExample />;
+	return <SquatCoachApp />;
 }

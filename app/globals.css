@@ -80,6 +80,15 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --coach-bg: #f7f7f4;
+  --coach-panel: #ffffff;
+  --coach-line: color-mix(in srgb, #14181a 10%, transparent);
+  --coach-sage: #8b9685;
+  --coach-accent: #d07a4a;
+  --coach-graphite: #313735;
+  --coach-ink: #14181a;
+  --coach-rabbit: #f4f1ec;
+  --coach-rabbit-detail: #14181a;
 }
 
 .dark {
@@ -114,6 +123,15 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  --coach-bg: #070707;
+  --coach-panel: #101010;
+  --coach-line: color-mix(in srgb, white 12%, transparent);
+  --coach-sage: #8f9b8b;
+  --coach-accent: #e28452;
+  --coach-graphite: #2a2f2d;
+  --coach-ink: #f4f1ea;
+  --coach-rabbit: #f4f1ea;
+  --coach-rabbit-detail: #14181a;
 }
 
 @layer base {
@@ -122,5 +140,290 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@layer components {
+  .countdown-overlay {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    border-radius: 0.5rem;
+    background: color-mix(in srgb, var(--coach-panel) 78%, transparent);
+    backdrop-filter: blur(6px);
+  }
+
+  .countdown-label {
+    align-self: end;
+    color: color-mix(in srgb, var(--coach-ink) 62%, transparent);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  .countdown-number {
+    align-self: start;
+    color: var(--coach-accent);
+    font-size: clamp(5rem, 22vw, 9rem);
+    font-weight: 950;
+    line-height: 0.9;
+    animation: countdown-pop 900ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  .bunny-stage {
+    position: relative;
+    width: min(62vw, 300px);
+    aspect-ratio: 1 / 1.08;
+    transform-origin: 50% 84%;
+    animation: bunny-idle 3.2s ease-in-out infinite;
+  }
+
+  .bunny-stage.is-squat {
+    animation: bunny-squat 360ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  .bunny-stage.is-cheer {
+    animation: bunny-cheer 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  .bunny-floor-line {
+    position: absolute;
+    left: 20%;
+    right: 20%;
+    bottom: 13%;
+    height: 1px;
+    background: color-mix(in srgb, var(--coach-ink) 14%, transparent);
+  }
+
+  .bunny-shadow {
+    position: absolute;
+    left: 28%;
+    right: 28%;
+    bottom: 8%;
+    height: 4%;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--coach-ink) 10%, transparent);
+    filter: blur(8px);
+  }
+
+  .bunny-ear,
+  .bunny-head,
+  .bunny-body,
+  .bunny-arm,
+  .bunny-leg {
+    position: absolute;
+    background: var(--coach-rabbit);
+    border: 2px solid color-mix(in srgb, var(--coach-rabbit-detail) 82%, transparent);
+    box-shadow: none;
+  }
+
+  .bunny-ear {
+    top: 5%;
+    width: 11%;
+    height: 32%;
+    border-radius: 999px 999px 70% 70%;
+    transform-origin: 50% 92%;
+  }
+
+  .bunny-ear::after {
+    content: "";
+    position: absolute;
+    inset: 13% 36% 18%;
+    border-radius: inherit;
+    background: color-mix(in srgb, var(--coach-accent) 24%, var(--coach-panel));
+  }
+
+  .bunny-ear-left {
+    left: 35%;
+    rotate: -7deg;
+  }
+
+  .bunny-ear-right {
+    right: 35%;
+    rotate: 7deg;
+  }
+
+  .bunny-head {
+    left: 30%;
+    top: 29%;
+    width: 40%;
+    height: 28%;
+    border-radius: 42% 42% 40% 40%;
+  }
+
+  .bunny-brow {
+    position: absolute;
+    top: 32%;
+    width: 13%;
+    height: 2.5px;
+    border-radius: 999px;
+    background: var(--coach-rabbit-detail);
+  }
+
+  .bunny-brow-left {
+    left: 30%;
+    rotate: -8deg;
+  }
+
+  .bunny-brow-right {
+    right: 30%;
+    rotate: 8deg;
+  }
+
+  .bunny-eye {
+    position: absolute;
+    top: 43%;
+    width: 7%;
+    height: 7%;
+    border-radius: 999px;
+    background: var(--coach-rabbit-detail);
+  }
+
+  .bunny-eye-left {
+    left: 34%;
+  }
+
+  .bunny-eye-right {
+    right: 34%;
+  }
+
+  .bunny-nose {
+    position: absolute;
+    left: 47%;
+    top: 55%;
+    width: 6%;
+    height: 4.5%;
+    border-radius: 999px;
+    background: var(--coach-accent);
+  }
+
+  .bunny-mouth {
+    position: absolute;
+    left: 42.5%;
+    top: 64%;
+    width: 15%;
+    height: 7%;
+    border-bottom: 2.5px solid var(--coach-rabbit-detail);
+    border-radius: 0 0 999px 999px;
+  }
+
+  .bunny-body {
+    left: 31%;
+    top: 55%;
+    width: 38%;
+    height: 28%;
+    border-radius: 28% 28% 16% 16%;
+    background: var(--coach-graphite);
+    border-color: var(--coach-graphite);
+  }
+
+  .bunny-vest-panel {
+    position: absolute;
+    inset: 13% 20% 18%;
+    border: 1px solid color-mix(in srgb, white 30%, transparent);
+    border-radius: 18% 18% 10% 10%;
+  }
+
+  .bunny-core-line {
+    position: absolute;
+    left: 49%;
+    top: 14%;
+    width: 2%;
+    height: 70%;
+    background: color-mix(in srgb, white 30%, transparent);
+  }
+
+  .bunny-arm {
+    top: 60%;
+    width: 9%;
+    height: 25%;
+    border-radius: 999px;
+    background: var(--coach-rabbit);
+  }
+
+  .bunny-arm-left {
+    left: 25%;
+    rotate: 17deg;
+  }
+
+  .bunny-arm-right {
+    right: 25%;
+    rotate: -17deg;
+  }
+
+  .bunny-leg {
+    top: 79%;
+    width: 12%;
+    height: 14%;
+    border-radius: 30% 30% 42% 42%;
+    background: var(--coach-ink);
+    border-color: var(--coach-ink);
+  }
+
+  .bunny-leg-left {
+    left: 38%;
+    rotate: 6deg;
+  }
+
+  .bunny-leg-right {
+    right: 38%;
+    rotate: -6deg;
+  }
+}
+
+@keyframes bunny-idle {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 -3px;
+  }
+}
+
+@keyframes bunny-squat {
+  0% {
+    translate: 0 0;
+    scale: 1;
+  }
+  70% {
+    translate: 0 36px;
+    scale: 1.04 0.88;
+  }
+  100% {
+    translate: 0 28px;
+    scale: 1.03 0.9;
+  }
+}
+
+@keyframes bunny-cheer {
+  0% {
+    translate: 0 24px;
+    rotate: 0deg;
+  }
+  45% {
+    translate: 0 -18px;
+    rotate: -2deg;
+  }
+  100% {
+    translate: 0 0;
+    rotate: 0deg;
+  }
+}
+
+@keyframes countdown-pop {
+  0% {
+    opacity: 0;
+    scale: 0.82;
+  }
+  22% {
+    opacity: 1;
+    scale: 1;
+  }
+  100% {
+    opacity: 0.78;
+    scale: 0.96;
   }
 }
