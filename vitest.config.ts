@@ -9,7 +9,7 @@ export default defineConfig({
     setupFiles: ["./vitest.setup.ts"],
     globals: true,
     passWithNoTests: true,
-    exclude: [".claude/worktrees/**", "node_modules/**"],
+    exclude: [".claude/worktrees/**", "e2e/**", "node_modules/**"],
   },
   resolve: {
     alias: {

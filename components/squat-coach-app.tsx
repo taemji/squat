@@ -6,18 +6,16 @@ import {
   CheckIcon,
   RotateCcwIcon,
   Share2Icon,
-  SmartphoneIcon,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { createSquatMotionProfile, evaluateSquatMotion, type MotionStage, type SquatMotionProfile, type SquatMotionState } from "@/lib/squat-motion";
 
 type WorkoutPhase = "setup" | "countdown" | "active" | "complete";
 type SensorStatus = "idle" | "listening" | "unsupported" | "blocked";
-type MotionStage = "steady" | "descending" | "bottom" | "rising";
-type SquatMotionState = "standing" | "down" | "rising";
 
 function formatDuration(totalSeconds: number) {
   const minutes = Math.floor(totalSeconds / 60);
@@ -87,10 +85,10 @@ export function SquatCoachApp() {
   const [phase, setPhase] = useState<WorkoutPhase>("setup");
   const [, setLastMove] = useState<"ready" | "squat" | "cheer">("ready");
   const [sensorStatus, setSensorStatus] = useState<SensorStatus>("idle");
-  const [motionLevel, setMotionLevel] = useState(0);
-  const [motionStage, setMotionStage] = useState<MotionStage>("steady");
-  const [isCalibrating, setIsCalibrating] = useState(false);
-  const [calibrationProgress, setCalibrationProgress] = useState(0);
+  const [, setMotionLevel] = useState(0);
+  const [, setMotionStage] = useState<MotionStage>("steady");
+  const [, setIsCalibrating] = useState(false);
+  const [, setCalibrationProgress] = useState(0);
   const [countdownValue, setCountdownValue] = useState<3 | 2 | 1 | 0>(3);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const baselineRef = useRef<number | null>(null);
@@ -101,7 +99,7 @@ export function SquatCoachApp() {
   const isCalibratingRef = useRef(false);
   const activeGoalRef = useRef(goal);
   const motionStateRef = useRef<SquatMotionState>("standing");
-  const lastRepAtRef = useRef(0);
+  const motionProfileRef = useRef<SquatMotionProfile>(createSquatMotionProfile());
   const listenerAttachedRef = useRef(false);
   const workoutStartedAtRef = useRef<number | null>(null);
 
@@ -200,30 +198,17 @@ export function SquatCoachApp() {
     const motionScore = movement + tiltDelta / 24;
     setMotionLevel(Math.min(100, Math.round(motionScore * 20)));
 
-    const now = event.timeStamp;
+    const nextMotion = evaluateSquatMotion(motionStateRef.current, tiltDelta, motionProfileRef.current);
 
-    if (motionStateRef.current === "standing" && motionScore > 2.4) {
-      motionStateRef.current = "down";
-      setMotionStage("descending");
+    if (nextMotion.state !== motionStateRef.current && nextMotion.state === "down") {
       setLastMove("squat");
-      return;
     }
 
-    if (motionStateRef.current === "down" && motionScore > 3.2) {
-      setMotionStage("bottom");
-      return;
-    }
+    motionStateRef.current = nextMotion.state;
+    motionProfileRef.current = nextMotion.profile;
+    setMotionStage(nextMotion.stage);
 
-    if (motionStateRef.current === "down" && motionScore < 1.6) {
-      motionStateRef.current = "rising";
-      setMotionStage("rising");
-      return;
-    }
-
-    if (motionStateRef.current === "rising" && motionScore < 0.95 && now - lastRepAtRef.current > 900) {
-      motionStateRef.current = "standing";
-      setMotionStage("steady");
-      lastRepAtRef.current = now;
+    if (nextMotion.completedRep) {
       addSquat("sensor");
     }
   }, [addSquat]);
@@ -287,7 +272,7 @@ export function SquatCoachApp() {
     calibrationUntilRef.current = 0;
     isCalibratingRef.current = true;
     motionStateRef.current = "standing";
-    lastRepAtRef.current = 0;
+    motionProfileRef.current = createSquatMotionProfile();
     workoutStartedAtRef.current = null;
     setIsCalibrating(true);
     setCalibrationProgress(0);
