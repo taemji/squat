@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIcon,
   CheckIcon,
-  MedalIcon,
   RotateCcwIcon,
   Share2Icon,
   SmartphoneIcon,
@@ -12,17 +11,8 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
 
 type WorkoutPhase = "setup" | "countdown" | "active" | "complete";
 type SensorStatus = "idle" | "listening" | "unsupported" | "blocked";
@@ -90,39 +80,12 @@ function speakMilestone(count: number, goal: number) {
   }
 }
 
-function BunnyCoach({ pose }: { pose: "ready" | "squat" | "cheer" }) {
-  return (
-    <div className={cn("bunny-stage", pose === "squat" && "is-squat", pose === "cheer" && "is-cheer")}>
-      <div className="bunny-floor-line" />
-      <div className="bunny-shadow" />
-      <div className="bunny-ear bunny-ear-left" />
-      <div className="bunny-ear bunny-ear-right" />
-      <div className="bunny-head">
-        <div className="bunny-brow bunny-brow-left" />
-        <div className="bunny-brow bunny-brow-right" />
-        <div className="bunny-eye bunny-eye-left" />
-        <div className="bunny-eye bunny-eye-right" />
-        <div className="bunny-nose" />
-        <div className="bunny-mouth" />
-      </div>
-      <div className="bunny-body">
-        <div className="bunny-vest-panel" />
-        <div className="bunny-core-line" />
-      </div>
-      <div className="bunny-arm bunny-arm-left" />
-      <div className="bunny-arm bunny-arm-right" />
-      <div className="bunny-leg bunny-leg-left" />
-      <div className="bunny-leg bunny-leg-right" />
-    </div>
-  );
-}
-
 export function SquatCoachApp() {
-  const [goal, setGoal] = useState(30);
-  const [goalInput, setGoalInput] = useState("30");
+  const [goal, setGoal] = useState(100);
+  const [goalInput, setGoalInput] = useState("100");
   const [count, setCount] = useState(0);
   const [phase, setPhase] = useState<WorkoutPhase>("setup");
-  const [lastMove, setLastMove] = useState<"ready" | "squat" | "cheer">("ready");
+  const [, setLastMove] = useState<"ready" | "squat" | "cheer">("ready");
   const [sensorStatus, setSensorStatus] = useState<SensorStatus>("idle");
   const [motionLevel, setMotionLevel] = useState(0);
   const [motionStage, setMotionStage] = useState<MotionStage>("steady");
@@ -143,7 +106,6 @@ export function SquatCoachApp() {
   const workoutStartedAtRef = useRef<number | null>(null);
 
   const progress = Math.min(100, Math.round((count / goal) * 100));
-  const remaining = Math.max(goal - count, 0);
   const elapsedTimeText = formatDuration(elapsedSeconds);
   const normalizedGoal = Number(goalInput);
   const isGoalValid = Number.isInteger(normalizedGoal) && normalizedGoal >= 1 && normalizedGoal <= 999;
@@ -402,85 +364,49 @@ export function SquatCoachApp() {
     await navigator.clipboard.writeText(resultText);
   }
 
-  const phaseLabel = phase === "setup" ? "목표 설정" : phase === "countdown" ? "준비" : phase === "active" ? "운동 중" : "결과";
-  const sensorMessage = sensorStatus === "listening"
-    ? "센서 감지 준비 완료"
-    : sensorStatus === "unsupported"
-      ? "이 브라우저는 움직임 센서를 지원하지 않아요."
-      : sensorStatus === "blocked"
-        ? "센서 권한이 거부됐어요. 브라우저 설정에서 모션 권한을 확인해주세요."
-        : "기기 센서 연결 전";
-  const motionStageLabel = motionStage === "steady"
-    ? "안정 자세"
-    : motionStage === "descending"
-      ? "내려가는 중"
-      : motionStage === "bottom"
-        ? "앉은 자세"
-        : "올라오는 중";
-
   return (
     <main className="min-h-svh overflow-hidden bg-[var(--coach-bg)] text-foreground">
-      <section className="mx-auto flex min-h-svh w-full max-w-md flex-col px-4 py-4 sm:py-6">
-        <header className="flex items-center justify-between gap-3 pb-4">
-          <div className="flex items-center gap-2">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-[var(--coach-ink)] text-primary-foreground shadow-sm">
-              <MedalIcon aria-hidden="true" />
-            </div>
-            <div>
-              <h1 className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Squat Coach</h1>
-            </div>
-          </div>
-          <Badge variant="secondary">{phaseLabel}</Badge>
+      <section className="mx-auto flex min-h-svh w-full max-w-[430px] flex-col px-5 py-5">
+        <header className="pb-5">
+          <h1 className="text-sm font-semibold tracking-[0.02em] text-[var(--coach-ink)]">Squat Coach</h1>
         </header>
 
-        <div className="flex flex-1 items-stretch pb-4">
-          <section className="app-screen relative flex w-full flex-col overflow-hidden rounded-lg border border-[var(--coach-line)] bg-[var(--coach-panel)] shadow-sm">
+        <div className="flex flex-1 items-stretch pb-3">
+          <section className="flex w-full flex-col overflow-hidden rounded-[2rem] border border-[var(--coach-line)] bg-[var(--coach-panel)] shadow-[0_24px_80px_rgba(20,24,26,0.08)]">
             {phase === "setup" && (
-              <div className="flex min-h-[calc(100svh-7.5rem)] flex-col justify-between gap-8 p-5 sm:p-6">
-                <div className="flex flex-col gap-6">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex flex-col gap-2">
-                      <Badge variant="outline">STEP 1</Badge>
-                      <p className="text-4xl font-black leading-[1.02] text-[var(--coach-ink)]">오늘 몇 개 할까요?</p>
+              <div className="flex min-h-[calc(100svh-8rem)] flex-col justify-between gap-8 p-6">
+                <div className="flex flex-col gap-8">
+                  <div className="flex flex-col gap-3 pt-2">
+                    <p className="text-3xl font-semibold leading-tight text-[var(--coach-ink)]">오늘 몇 개 할까요?</p>
+                  </div>
+
+                  <div className="flex min-h-[220px] flex-col items-center justify-center rounded-[1.5rem] bg-[var(--coach-surface)] px-6 text-center">
+                    <div className="mt-2 flex items-end justify-center gap-2 text-[7.5rem] font-semibold leading-none text-[var(--coach-ink)]">
+                      {isGoalValid ? normalizedGoal : "--"}
+                      <span className="pb-4 text-2xl font-semibold text-muted-foreground">회</span>
                     </div>
-                    <Badge variant="secondary">
-                      <SmartphoneIcon aria-hidden="true" />
-                      앱 모드
-                    </Badge>
                   </div>
 
-                  <div className="relative flex min-h-[240px] items-end justify-center rounded-lg bg-muted/60 pt-6">
-                    <BunnyCoach pose="ready" />
-                  </div>
-
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>목표 설정</CardTitle>
-                      <CardDescription>1개부터 999개까지 직접 입력할 수 있어요.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <FieldGroup>
-                        <Field data-invalid={!isGoalValid}>
-                          <FieldLabel htmlFor="squat-goal">목표 개수</FieldLabel>
-                          <Input
-                            id="squat-goal"
-                            inputMode="numeric"
-                            min={1}
-                            max={999}
-                            pattern="[0-9]*"
-                            type="number"
-                            value={goalInput}
-                            aria-invalid={!isGoalValid}
-                            onChange={(event) => setGoalInput(event.target.value)}
-                          />
-                          <FieldDescription>목표를 정하면 바로 3-2-1 카운트다운이 시작돼요.</FieldDescription>
-                        </Field>
-                      </FieldGroup>
-                    </CardContent>
-                  </Card>
+                  <FieldGroup>
+                    <Field data-invalid={!isGoalValid}>
+                      <FieldLabel htmlFor="squat-goal">목표 개수</FieldLabel>
+                      <Input
+                        id="squat-goal"
+                        className="h-14 rounded-2xl text-lg"
+                        inputMode="numeric"
+                        min={1}
+                        max={999}
+                        pattern="[0-9]*"
+                        type="number"
+                        value={goalInput}
+                        aria-invalid={!isGoalValid}
+                        onChange={(event) => setGoalInput(event.target.value)}
+                      />
+                    </Field>
+                  </FieldGroup>
                 </div>
 
-                <Button type="button" size="lg" onClick={startWorkout} disabled={!isGoalValid}>
+                <Button type="button" size="lg" className="h-14 rounded-full" onClick={startWorkout} disabled={!isGoalValid}>
                   시작하기
                   <CheckIcon data-icon="inline-end" />
                 </Button>
@@ -488,102 +414,83 @@ export function SquatCoachApp() {
             )}
 
             {phase === "countdown" && (
-              <div className="relative flex min-h-[calc(100svh-7.5rem)] flex-col justify-between gap-6 p-5 sm:p-6">
-                <div className="flex items-center justify-between gap-3">
-                  <Badge variant="outline">STEP 2</Badge>
+              <div className="relative flex min-h-[calc(100svh-8rem)] flex-col justify-between gap-6 p-6">
+                <div className="flex justify-end">
                   <Button type="button" variant="ghost" onClick={() => setPhase("setup")}>
                     취소
                   </Button>
                 </div>
 
-                <div className="flex flex-1 flex-col items-center justify-center gap-8 text-center">
+                <div className="flex flex-1 flex-col items-center justify-center gap-9 text-center">
                   <div>
-                    <p className="text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">Get Ready</p>
-                    <h2 className="mt-3 text-4xl font-black leading-none text-[var(--coach-ink)]">자세를 잡아주세요</h2>
+                    <p className="text-sm font-medium text-muted-foreground">Get Ready</p>
+                    <h2 className="mt-3 text-3xl font-semibold leading-tight text-[var(--coach-ink)]">자세를 잡아주세요</h2>
                   </div>
 
-                  <div className="relative flex min-h-[280px] w-full items-end justify-center rounded-lg bg-muted/60">
-                    <BunnyCoach pose="ready" />
-                    <div className="countdown-overlay" aria-live="assertive">
-                      <p className="countdown-label">곧 시작합니다</p>
-                      <p className="countdown-number">{countdownValue === 0 ? "START" : countdownValue}</p>
+                  <div className="grid aspect-square w-full max-w-[300px] place-items-center rounded-full bg-[var(--coach-surface)]" aria-live="assertive">
+                    <div className="countdown-pulse grid size-[78%] place-items-center rounded-full border border-[var(--coach-line)] bg-[var(--coach-panel)]">
+                      <p className="text-[5.5rem] font-semibold leading-none text-[var(--coach-ink)]">{countdownValue === 0 ? "Go" : countdownValue}</p>
                     </div>
                   </div>
 
                   <div className="flex flex-col items-center gap-3">
-                    <Badge variant={sensorStatus === "listening" ? "secondary" : "outline"}>{sensorMessage}</Badge>
-                    <p className="max-w-xs text-sm text-muted-foreground">폰을 가슴 앞에 들고, 발은 어깨너비로 둔 상태에서 시작해요.</p>
+                    <p className="text-sm font-medium text-[var(--coach-ink)]">곧 시작합니다</p>
+                    <p className="max-w-xs text-sm text-muted-foreground">폰을 가슴 앞에 들고 발을 어깨너비로 맞춰주세요.</p>
                   </div>
                 </div>
 
-                <Button type="button" variant="outline" onClick={() => setPhase("active")}>
+                <Button type="button" variant="outline" className="h-14 rounded-full" onClick={() => setPhase("active")}>
                   바로 시작
                 </Button>
               </div>
             )}
 
             {phase === "active" && (
-              <div className="flex min-h-[calc(100svh-7.5rem)] flex-col justify-between gap-5 p-5 sm:p-6">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex flex-col gap-2">
-                    <Badge variant="outline">STEP 3</Badge>
-                    <p className="text-3xl font-black leading-none text-[var(--coach-ink)]">스쿼트 수행</p>
+              <div className="flex min-h-[calc(100svh-8rem)] flex-col justify-between gap-6 p-6">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex flex-col gap-1">
+                    <p className="text-2xl font-semibold leading-none text-[var(--coach-ink)]">스쿼트 수행</p>
                   </div>
-                  <div className="rounded-lg border border-[var(--coach-line)] bg-background px-4 py-3 text-right">
-                    <p className="text-xs font-semibold text-muted-foreground">COUNT</p>
-                    <p className="text-5xl font-black text-[var(--coach-accent)]">{count}</p>
+                  <Badge variant="secondary">{elapsedTimeText}</Badge>
+                </div>
+
+                <div className="flex flex-1 flex-col items-center justify-center gap-7">
+                  <div
+                    className="progress-ring grid aspect-square w-full max-w-[300px] place-items-center rounded-full"
+                    style={{ "--progress": `${progress}%` } as React.CSSProperties}
+                  >
+                    <div className="grid size-[78%] place-items-center rounded-full bg-[var(--coach-panel)] text-center">
+                      <div>
+                        <p className="text-[6rem] font-semibold leading-none text-[var(--coach-ink)]">{count}</p>
+                        <p className="mt-2 text-sm text-muted-foreground">/ {goal} reps</p>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                <div className="relative flex min-h-[250px] flex-1 items-end justify-center rounded-lg bg-muted/60">
-                  <BunnyCoach pose={lastMove} />
-                </div>
-
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="rounded-lg border border-[var(--coach-line)] bg-background p-3">
-                    <p className="text-xs font-semibold text-muted-foreground">목표</p>
-                    <p className="text-2xl font-black">{goal}</p>
+                <div className="grid grid-cols-2 gap-3 text-center">
+                  <div className="rounded-2xl bg-[var(--coach-surface)] p-4">
+                    <p className="text-xs text-muted-foreground">목표</p>
+                    <p className="mt-1 text-xl font-semibold text-[var(--coach-ink)]">{goal}</p>
                   </div>
-                  <div className="rounded-lg border border-[var(--coach-line)] bg-background p-3">
-                    <p className="text-xs font-semibold text-muted-foreground">남음</p>
-                    <p className="text-2xl font-black">{remaining}</p>
+                  <div className="rounded-2xl bg-[var(--coach-surface)] p-4">
+                    <p className="text-xs text-muted-foreground">진행</p>
+                    <p className="mt-1 text-xl font-semibold text-[var(--coach-ink)]">{progress}%</p>
                   </div>
-                  <div className="rounded-lg border border-[var(--coach-line)] bg-background p-3">
-                    <p className="text-xs font-semibold text-muted-foreground">시간</p>
-                    <p className="text-2xl font-black">{elapsedTimeText}</p>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-3 rounded-lg bg-muted p-4">
-                  <div className="flex items-center justify-between gap-3 text-sm font-semibold">
-                    <span>{isCalibrating ? "기준 자세 측정" : motionStageLabel}</span>
-                    <Badge variant="secondary">{isCalibrating ? `${calibrationProgress}%` : `${motionLevel}%`}</Badge>
-                  </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-background/70">
-                    <div
-                      className="h-full rounded-full bg-[var(--coach-accent)] transition-all duration-200"
-                      style={{ width: `${isCalibrating ? calibrationProgress : motionLevel}%` }}
-                    />
-                  </div>
-                  <p className="text-sm text-muted-foreground">{sensorMessage}</p>
-                </div>
-
-                <div className="h-3 overflow-hidden rounded-full bg-muted">
-                  <div className="h-full rounded-full bg-[var(--coach-accent)] transition-all duration-500" style={{ width: `${progress}%` }} />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
-                  <Button type="button" variant="outline" onClick={connectMotionSensor} disabled={sensorStatus === "listening" || count >= goal}>
+                  <Button type="button" variant="outline" className="rounded-full" onClick={connectMotionSensor} disabled={sensorStatus === "listening" || count >= goal}>
                     <ActivityIcon data-icon="inline-start" />
                     센서
                   </Button>
-                  <Button type="button" onClick={() => addSquat()} disabled={count >= goal}>
+                  <Button type="button" className="rounded-full" onClick={() => addSquat()} disabled={count >= goal}>
                     수동 +1
                   </Button>
-                  <Button type="button" variant="ghost" onClick={() => setPhase("setup")}>
+                  <Button type="button" variant="ghost" className="rounded-full" onClick={() => setPhase("setup")}>
                     목표 변경
                   </Button>
-                  <Button type="button" variant="outline" onClick={() => setPhase("complete")}>
+                  <Button type="button" variant="outline" className="rounded-full" onClick={() => setPhase("complete")}>
                     종료
                   </Button>
                 </div>
@@ -591,46 +498,39 @@ export function SquatCoachApp() {
             )}
 
             {phase === "complete" && (
-              <div className="flex min-h-[calc(100svh-7.5rem)] flex-col justify-between gap-7 p-5 sm:p-6">
-                <div className="flex items-center justify-between gap-3">
-                  <Badge variant="outline">STEP 4</Badge>
-                  <Badge variant="secondary">목표 {progress >= 100 ? "달성" : "기록 저장"}</Badge>
-                </div>
-
-                <div className="flex flex-1 flex-col items-center justify-center gap-6 text-center">
-                  <div className="relative flex min-h-[250px] w-full items-end justify-center rounded-lg bg-muted/60">
-                    <BunnyCoach pose="cheer" />
+              <div className="flex min-h-[calc(100svh-8rem)] flex-col justify-between gap-7 p-6">
+                <div className="flex flex-1 flex-col items-center justify-center gap-7 text-center">
+                  <div
+                    className="progress-ring grid aspect-square w-full max-w-[280px] place-items-center rounded-full"
+                    style={{ "--progress": `${progress}%` } as React.CSSProperties}
+                  >
+                    <div className="grid size-[78%] place-items-center rounded-full bg-[var(--coach-panel)]">
+                      <CheckIcon className="size-16 text-[var(--coach-accent)]" aria-hidden="true" />
+                    </div>
                   </div>
                   <div>
-                    <p className="text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">Result</p>
-                    <h2 className="mt-3 text-5xl font-black leading-none text-[var(--coach-ink)]">{count}개 완료</h2>
+                    <p className="text-sm font-medium text-muted-foreground">Result</p>
+                    <h2 className="mt-3 text-5xl font-semibold leading-none text-[var(--coach-ink)]">{count}개 완료</h2>
                     <p className="mt-3 text-sm text-muted-foreground">목표 {goal}개 중 {progress}% 달성했어요.</p>
                   </div>
                 </div>
 
-                <Card>
-                  <CardHeader>
-                    <CardTitle>오늘의 기록</CardTitle>
-                    <CardDescription>운동 시간 {elapsedTimeText} · 남은 개수 {remaining}개</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="rounded-lg bg-[var(--coach-ink)] p-5 text-primary-foreground">
-                      <p className="text-sm opacity-80">Squat Coach Result</p>
-                      <p className="mt-3 text-4xl font-black">{count} / {goal}</p>
-                      <p className="mt-2 text-sm opacity-80">달성률 {progress}% · 운동 시간 {elapsedTimeText}</p>
-                    </div>
-                  </CardContent>
-                  <CardFooter className="grid grid-cols-2 gap-3">
-                    <Button type="button" variant="outline" onClick={startWorkout}>
-                      <RotateCcwIcon data-icon="inline-start" />
-                      다시 하기
-                    </Button>
-                    <Button type="button" onClick={shareResult}>
-                      <Share2Icon data-icon="inline-start" />
-                      공유
-                    </Button>
-                  </CardFooter>
-                </Card>
+                <div className="rounded-2xl bg-[var(--coach-surface)] p-5">
+                  <p className="text-sm text-muted-foreground">Squat Coach Result</p>
+                  <p className="mt-3 text-4xl font-semibold text-[var(--coach-ink)]">{count} / {goal}</p>
+                  <p className="mt-2 text-sm text-muted-foreground">달성률 {progress}% · 운동 시간 {elapsedTimeText}</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Button type="button" variant="outline" className="rounded-full" onClick={startWorkout}>
+                    <RotateCcwIcon data-icon="inline-start" />
+                    다시 하기
+                  </Button>
+                  <Button type="button" className="rounded-full" onClick={shareResult}>
+                    <Share2Icon data-icon="inline-start" />
+                    공유
+                  </Button>
+                </div>
               </div>
             )}
           </section>
