@@ -377,7 +377,7 @@ export function SquatCoachApp() {
               <div className="flex min-h-[calc(100svh-8rem)] flex-col justify-between gap-8 p-6">
                 <div className="flex flex-col gap-8">
                   <div className="flex flex-col gap-3 pt-2">
-                    <p className="text-3xl font-semibold leading-tight text-[var(--coach-ink)]">오늘 몇 개 할까요?</p>
+                    <p className="text-3xl font-semibold leading-tight text-[var(--coach-ink)]">스쿼트 몇 개 할까요?</p>
                   </div>
 
                   <div className="flex min-h-[220px] flex-col items-center justify-center rounded-[1.5rem] bg-[var(--coach-surface)] px-6 text-center">
