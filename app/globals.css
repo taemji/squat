@@ -86,6 +86,8 @@
   --coach-line: color-mix(in srgb, #0f172a 9%, transparent);
   --coach-accent: #17c964;
   --coach-ink: #111827;
+  --coach-soft-ink: #667085;
+  --coach-glow: color-mix(in srgb, var(--coach-accent) 18%, transparent);
 }
 
 .dark {
@@ -126,6 +128,8 @@
   --coach-line: color-mix(in srgb, white 10%, transparent);
   --coach-accent: #39e58c;
   --coach-ink: #f8fafc;
+  --coach-soft-ink: #9aa4b2;
+  --coach-glow: color-mix(in srgb, var(--coach-accent) 22%, transparent);
 }
 
 @layer base {
@@ -138,6 +142,53 @@
 }
 
 @layer components {
+  .coach-shell {
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--coach-bg) 82%, white 18%) 0%, var(--coach-bg) 48%, color-mix(in srgb, var(--coach-bg) 88%, var(--coach-accent) 12%) 100%);
+  }
+
+  .coach-wordmark {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.38rem;
+    color: var(--coach-ink);
+    font-size: 1.08rem;
+    font-weight: 720;
+    letter-spacing: 0;
+    line-height: 1;
+  }
+
+  .coach-wordmark::before {
+    content: "";
+    width: 0.5rem;
+    height: 1.45rem;
+    border-radius: 999px;
+    background: var(--coach-accent);
+    box-shadow: 0 0 22px var(--coach-glow);
+  }
+
+  .coach-wordmark-main {
+    font-weight: 780;
+  }
+
+  .coach-wordmark-accent {
+    color: var(--coach-soft-ink);
+    font-weight: 620;
+  }
+
+  .coach-card {
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--coach-panel) 94%, var(--coach-accent) 6%) 0%, var(--coach-panel) 34%),
+      var(--coach-panel);
+    box-shadow: 0 24px 80px color-mix(in srgb, var(--coach-ink) 10%, transparent), 0 1px 0 color-mix(in srgb, white 62%, transparent) inset;
+  }
+
+  .coach-target-panel {
+    background:
+      linear-gradient(160deg, color-mix(in srgb, var(--coach-surface) 76%, white 24%) 0%, var(--coach-surface) 58%, color-mix(in srgb, var(--coach-surface) 88%, var(--coach-accent) 12%) 100%);
+    box-shadow: 0 1px 0 color-mix(in srgb, white 70%, transparent) inset, 0 18px 42px color-mix(in srgb, var(--coach-ink) 6%, transparent);
+  }
+
   .progress-ring {
     background: conic-gradient(var(--coach-accent) var(--progress), var(--coach-surface) 0);
   }

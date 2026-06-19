@@ -350,25 +350,29 @@ export function SquatCoachApp() {
   }
 
   return (
-    <main className="min-h-svh overflow-hidden bg-[var(--coach-bg)] text-foreground">
+    <main className="coach-shell min-h-svh overflow-hidden text-foreground">
       <section className="mx-auto flex min-h-svh w-full max-w-[430px] flex-col px-5 py-5">
-        <header className="pb-5">
-          <h1 className="text-sm font-semibold tracking-[0.02em] text-[var(--coach-ink)]">Squat Coach</h1>
+        <header className="flex justify-center pb-5 pt-1 text-center">
+          <h1 className="coach-wordmark" aria-label="Squat Coach">
+            <span aria-hidden="true" className="coach-wordmark-main">Squat</span>
+            <span aria-hidden="true" className="coach-wordmark-accent">Coach</span>
+          </h1>
         </header>
 
         <div className="flex flex-1 items-stretch pb-3">
-          <section className="flex w-full flex-col overflow-hidden rounded-[2rem] border border-[var(--coach-line)] bg-[var(--coach-panel)] shadow-[0_24px_80px_rgba(20,24,26,0.08)]">
+          <section className="coach-card flex w-full flex-col overflow-hidden rounded-[2rem] border border-[var(--coach-line)] bg-[var(--coach-panel)]">
             {phase === "setup" && (
               <div className="flex min-h-[calc(100svh-8rem)] flex-col justify-between gap-8 p-6">
-                <div className="flex flex-col gap-8">
+                <div className="flex flex-col gap-7">
                   <div className="flex flex-col gap-3 pt-2">
-                    <p className="text-3xl font-semibold leading-tight text-[var(--coach-ink)]">스쿼트 몇 개 할까요?</p>
+                    <p className="max-w-[11ch] text-[2.15rem] font-semibold leading-[1.05] text-[var(--coach-ink)]">스쿼트 몇 개 할까요?</p>
+                    <div className="h-1 w-12 rounded-full bg-[var(--coach-accent)]" aria-hidden="true" />
                   </div>
 
-                  <div className="flex min-h-[220px] flex-col items-center justify-center rounded-[1.5rem] bg-[var(--coach-surface)] px-6 text-center">
-                    <div className="mt-2 flex items-end justify-center gap-2 text-[7.5rem] font-semibold leading-none text-[var(--coach-ink)]">
+                  <div className="coach-target-panel flex min-h-[228px] flex-col items-center justify-center rounded-[1.5rem] px-6 text-center">
+                    <div className="flex items-end justify-center gap-2 text-[7.75rem] font-semibold leading-none text-[var(--coach-ink)]">
                       {isGoalValid ? normalizedGoal : "--"}
-                      <span className="pb-4 text-2xl font-semibold text-muted-foreground">회</span>
+                      <span className="pb-4 text-2xl font-semibold text-[var(--coach-soft-ink)]">회</span>
                     </div>
                   </div>
 
@@ -494,15 +498,13 @@ export function SquatCoachApp() {
                     </div>
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-muted-foreground">Result</p>
-                    <h2 className="mt-3 text-5xl font-semibold leading-none text-[var(--coach-ink)]">{count}개 완료</h2>
+                    <h2 className="text-5xl font-semibold leading-none text-[var(--coach-ink)]">{count}개 완료</h2>
                     <p className="mt-3 text-sm text-muted-foreground">목표 {goal}개 중 {progress}% 달성했어요.</p>
                   </div>
                 </div>
 
                 <div className="rounded-2xl bg-[var(--coach-surface)] p-5">
-                  <p className="text-sm text-muted-foreground">Squat Coach Result</p>
-                  <p className="mt-3 text-4xl font-semibold text-[var(--coach-ink)]">{count} / {goal}</p>
+                  <p className="text-4xl font-semibold text-[var(--coach-ink)]">{count} / {goal}</p>
                   <p className="mt-2 text-sm text-muted-foreground">달성률 {progress}% · 운동 시간 {elapsedTimeText}</p>
                 </div>
 
