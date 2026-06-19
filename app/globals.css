@@ -150,12 +150,14 @@
   .coach-wordmark {
     display: inline-flex;
     align-items: center;
-    gap: 0.38rem;
+    gap: 0.04rem;
     color: var(--coach-ink);
-    font-size: 1.08rem;
-    font-weight: 720;
-    letter-spacing: 0;
+    font-family: var(--font-sans);
+    font-size: 1.24rem;
+    font-weight: 900;
+    letter-spacing: -0.015em;
     line-height: 1;
+    text-rendering: geometricPrecision;
   }
 
   .coach-wordmark::before {
@@ -168,12 +170,12 @@
   }
 
   .coach-wordmark-main {
-    font-weight: 780;
+    font-weight: 920;
   }
 
   .coach-wordmark-accent {
-    color: var(--coach-soft-ink);
-    font-weight: 620;
+    color: color-mix(in srgb, var(--coach-ink) 72%, var(--coach-accent) 28%);
+    font-weight: 820;
   }
 
   .coach-card {
