@@ -359,12 +359,16 @@ export function SquatCoachApp() {
         type: shareImageBlob.type || "image/png",
       });
 
-      // Web Share API 시도. 텍스트를 같이 넣으면 일부 앱이 글 공유로 처리해서 파일만 보냅니다.
-      if (navigator.share && navigator.canShare?.({ files: [shareImageFile] })) {
+      if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [shareImageFile] }))) {
         await navigator.share({
           title: "Squat Coach 기록",
           files: [shareImageFile],
         });
+        return;
+      }
+
+      if (navigator.share) {
+        await navigator.share({ title: "Squat Coach 기록", text: resultText });
         return;
       }
 
