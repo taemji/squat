@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { createSquatMotionProfile, evaluateSquatMotion, type MotionStage, type SquatMotionProfile, type SquatMotionState } from "@/lib/squat-motion";
+import { generateShareImage } from "@/lib/share-image";
 
 type WorkoutPhase = "setup" | "countdown" | "active" | "complete";
 type SensorStatus = "idle" | "listening" | "unsupported" | "blocked";
@@ -341,12 +342,43 @@ export function SquatCoachApp() {
   }, [handleMotion, handleOrientation]);
 
   async function shareResult() {
-    if (navigator.share) {
-      await navigator.share({ title: "Squat Coach 기록", text: resultText });
-      return;
-    }
+    try {
+      // 칼로리 계산 (반복수 × 0.6 kcal)
+      const calories = Math.round(count * 0.6 * 10) / 10;
 
-    await navigator.clipboard.writeText(resultText);
+      // 공유 이미지 생성
+      const shareImageBlob = await generateShareImage({
+        todayReps: count,
+        todayTime: elapsedSeconds,
+        calories: calories,
+        totalDays: -1, // DB 미연결이므로 TBD
+        totalReps: -1, // DB 미연결이므로 TBD
+      });
+
+      // Web Share API 시도
+      if (navigator.share && navigator.canShare?.({ files: [new File([shareImageBlob], "squat-coach-record.png")] })) {
+        await navigator.share({
+          title: "Squat Coach 기록",
+          text: resultText,
+          files: [new File([shareImageBlob], "squat-coach-record.png")],
+        });
+        return;
+      }
+
+      // Web Share API 없으면 다운로드
+      const url = URL.createObjectURL(shareImageBlob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `squat-coach-${new Date().toISOString().slice(0, 10)}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Share failed:", error);
+      // 실패 시 텍스트로 폴백
+      await navigator.clipboard.writeText(resultText);
+    }
   }
 
   return (
