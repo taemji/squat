@@ -64,6 +64,33 @@ export async function generateShareImage(props: ShareImageProps): Promise<Blob> 
   const white = "rgba(255, 255, 255, 0.96)";
   const mutedWhite = "rgba(255, 255, 255, 0.78)";
 
+  function drawCenteredStatValue(
+    context: CanvasRenderingContext2D,
+    value: string,
+    unit: string,
+    centerX: number,
+    baselineY: number
+  ) {
+    context.textAlign = "left";
+    context.fillStyle = white;
+
+    context.font = font(800, 82);
+    const valueWidth = context.measureText(value).width;
+    const unitGap = unit ? 10 : 0;
+
+    context.font = font(800, 54);
+    const unitWidth = unit ? context.measureText(unit).width : 0;
+    const startX = centerX - (valueWidth + unitGap + unitWidth) / 2;
+
+    context.font = font(800, 82);
+    context.fillText(value, startX, baselineY);
+
+    if (unit) {
+      context.font = font(800, 54);
+      context.fillText(unit, startX + valueWidth + unitGap, baselineY);
+    }
+  }
+
   ctx.textBaseline = "alphabetic";
   ctx.fillStyle = white;
 
@@ -95,26 +122,34 @@ export async function generateShareImage(props: ShareImageProps): Promise<Blob> 
 
   ctx.textAlign = "left";
   ctx.fillStyle = white;
+  const todayRepsText = String(todayReps);
+  const countSlotLeft = 92;
+  const countUnitX = 650;
+  const countUnitGap = 34;
+  const countSlotRight = countUnitX - countUnitGap;
+  const countSlotWidth = countSlotRight - countSlotLeft;
   ctx.font = font(900, 380);
-  ctx.fillText(String(todayReps), 92, 870);
+  const countTextWidth = ctx.measureText(todayRepsText).width;
 
-  ctx.font = font(800, 76);
-  ctx.fillText("개", 650, 850);
+  if (countTextWidth > countSlotWidth) {
+    ctx.font = font(900, Math.floor(380 * (countSlotWidth / countTextWidth)));
+  }
 
-  ctx.fillStyle = mutedWhite;
-  ctx.font = font(600, 44);
-  ctx.fillText("오늘의 스쿼트", 98, 980);
+  ctx.textAlign = "right";
+  ctx.fillText(todayRepsText, countSlotRight, 870);
+
+  ctx.textAlign = "left";
+  ctx.font = font(800, 118);
+  ctx.fillText("개", countUnitX, 850);
 
   const minutes = Math.floor(todayTime / 60);
   const seconds = todayTime % 60;
   const timeStr = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-  const totalDaysText = totalDays < 0 ? "TBD" : `${totalDays}일`;
-  const totalRepsText = totalReps < 0 ? "TBD" : `${totalReps}개`;
   const stats = [
-    { value: timeStr, label: "시간" },
-    { value: totalDaysText, label: "총 운동일" },
-    { value: `${calories.toFixed(1)}kcal`, label: "활동 칼로리" },
-    { value: totalRepsText, label: "전체" },
+    { value: timeStr, unit: "", label: "시간" },
+    { value: totalDays < 0 ? "TBD" : String(totalDays), unit: totalDays < 0 ? "" : "일", label: "총 운동일" },
+    { value: calories.toFixed(1), unit: "kcal", label: "활동 칼로리" },
+    { value: totalReps < 0 ? "TBD" : totalReps.toLocaleString("ko-KR"), unit: totalReps < 0 ? "" : "개", label: "전체" },
   ];
 
   ctx.strokeStyle = "rgba(255, 255, 255, 0.42)";
@@ -128,13 +163,11 @@ export async function generateShareImage(props: ShareImageProps): Promise<Blob> 
 
   for (const [index, stat] of stats.entries()) {
     const center = [320, 720, 1156, 1624][index];
+    drawCenteredStatValue(ctx, stat.value, stat.unit, center, 1698);
     ctx.textAlign = "center";
-    ctx.fillStyle = white;
-    ctx.font = font(800, 82);
-    ctx.fillText(stat.value, center, 1698);
     ctx.fillStyle = mutedWhite;
-    ctx.font = font(600, 40);
-    ctx.fillText(stat.label, center, 1794);
+    ctx.font = font(500, 58);
+    ctx.fillText(stat.label, center, 1810);
   }
 
   return new Promise((resolve, reject) => {
