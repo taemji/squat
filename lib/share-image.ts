@@ -1,6 +1,6 @@
 /**
  * Canvas API를 사용해 공유용 이미지 생성
- * 1080x1920px PNG 포맷 with background image
+ * 배경 이미지 원본 크기 위에 텍스트를 얹은 PNG를 생성
  */
 
 interface ShareImageProps {
@@ -11,12 +11,29 @@ interface ShareImageProps {
   totalReps?: number;
 }
 
+function loadBackgroundImage() {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const backgroundImg = new Image();
+    backgroundImg.onload = () => resolve(backgroundImg);
+    backgroundImg.onerror = reject;
+    backgroundImg.src = `/workout-bg.png?v=${Date.now()}`;
+  });
+}
+
 export async function generateShareImage(props: ShareImageProps): Promise<Blob> {
   const { todayReps, todayTime, calories, totalDays = -1, totalReps = -1 } = props;
 
+  let backgroundImg: HTMLImageElement | null = null;
   const canvas = document.createElement("canvas");
-  canvas.width = 1080;
-  canvas.height = 1920;
+
+  try {
+    backgroundImg = await loadBackgroundImage();
+    canvas.width = backgroundImg.naturalWidth;
+    canvas.height = backgroundImg.naturalHeight;
+  } catch {
+    canvas.width = 1080;
+    canvas.height = 1920;
+  }
 
   const ctx = canvas.getContext("2d");
   if (!ctx) {
@@ -24,21 +41,9 @@ export async function generateShareImage(props: ShareImageProps): Promise<Blob> 
   }
 
   // 1. 배경 이미지 로드 및 그리기
-  try {
-    const backgroundImg = new Image();
-    backgroundImg.crossOrigin = "anonymous";
-    backgroundImg.src = "/workout-bg.png";
-    
-    await new Promise((resolve, reject) => {
-      backgroundImg.onload = () => {
-        canvas.width = backgroundImg.naturalWidth;
-        canvas.height = backgroundImg.naturalHeight;
-        ctx.drawImage(backgroundImg, 0, 0);
-        resolve(null);
-      };
-      backgroundImg.onerror = reject;
-    });
-  } catch (error) {
+  if (backgroundImg) {
+    ctx.drawImage(backgroundImg, 0, 0);
+  } else {
     // 배경 이미지 로드 실패 시 그라디언트 폴백
     const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
     gradient.addColorStop(0, "#9b6bb8");
