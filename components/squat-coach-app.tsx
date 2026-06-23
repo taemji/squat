@@ -355,12 +355,15 @@ export function SquatCoachApp() {
         totalReps: -1, // DB 미연결이므로 TBD
       });
 
-      // Web Share API 시도
-      if (navigator.share && navigator.canShare?.({ files: [new File([shareImageBlob], "squat-coach-record.png")] })) {
+      const shareImageFile = new File([shareImageBlob], "squat-coach-record.png", {
+        type: shareImageBlob.type || "image/png",
+      });
+
+      // Web Share API 시도. 텍스트를 같이 넣으면 일부 앱이 글 공유로 처리해서 파일만 보냅니다.
+      if (navigator.share && navigator.canShare?.({ files: [shareImageFile] })) {
         await navigator.share({
           title: "Squat Coach 기록",
-          text: resultText,
-          files: [new File([shareImageBlob], "squat-coach-record.png")],
+          files: [shareImageFile],
         });
         return;
       }
@@ -376,8 +379,6 @@ export function SquatCoachApp() {
       URL.revokeObjectURL(url);
     } catch (error) {
       console.error("Share failed:", error);
-      // 실패 시 텍스트로 폴백
-      await navigator.clipboard.writeText(resultText);
     }
   }
 
