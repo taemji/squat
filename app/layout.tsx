@@ -12,6 +12,11 @@ const notoSansKr = Noto_Sans_KR({
 export const metadata: Metadata = {
   title: "Squat Coach",
   description: "Mobile squat counter with motion-based form tracking",
+  icons: {
+    icon: "/icon.png",
+    shortcut: "/icon.png",
+    apple: "/icon.png",
+  },
 };
 
 export default function RootLayout({
