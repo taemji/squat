@@ -31,7 +31,9 @@ export async function generateShareImage(props: ShareImageProps): Promise<Blob> 
     
     await new Promise((resolve, reject) => {
       backgroundImg.onload = () => {
-        ctx.drawImage(backgroundImg, 0, 0, canvas.width, canvas.height);
+        canvas.width = backgroundImg.naturalWidth;
+        canvas.height = backgroundImg.naturalHeight;
+        ctx.drawImage(backgroundImg, 0, 0);
         resolve(null);
       };
       backgroundImg.onerror = reject;
@@ -50,70 +52,77 @@ export async function generateShareImage(props: ShareImageProps): Promise<Blob> 
   ctx.fillStyle = "rgba(0, 0, 0, 0.15)";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+  const scaleX = canvas.width / 1080;
+  const scaleY = canvas.height / 1920;
+  const scale = Math.min(scaleX, scaleY);
+  const x = (value: number) => value * scaleX;
+  const y = (value: number) => value * scaleY;
+  const font = (weight: "bold" | "normal", size: number) => `${weight} ${Math.round(size * scale)}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto`;
+
   // 3. 텍스트 색상
   ctx.fillStyle = "white";
 
   // ====== 좌상단 ======
   // 로고/타이틀
-  ctx.font = "bold 28px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto";
+  ctx.font = font("bold", 28);
   ctx.textAlign = "left";
-  ctx.fillText("🏋️ Squat Coach", 60, 100);
+  ctx.fillText("🏋️ Squat Coach", x(60), y(100));
 
   // 날짜
-  ctx.font = "18px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto";
+  ctx.font = font("normal", 18);
   const today = new Date().toLocaleDateString("ko-KR").replace(/\./g, ".").slice(0, -1);
-  ctx.fillText(today, 60, 140);
+  ctx.fillText(today, x(60), y(140));
 
   // ====== 중앙 (큰 숫자) ======
-  ctx.font = "bold 120px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto";
+  ctx.font = font("bold", 120);
   ctx.textAlign = "center";
-  ctx.fillText(`${todayReps}개`, canvas.width / 2, 600);
+  ctx.fillText(`${todayReps}개`, canvas.width / 2, y(600));
 
   // ====== 좌하단 ======
   ctx.textAlign = "left";
   
   // 운동 시간
-  ctx.font = "22px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto";
+  ctx.font = font("normal", 22);
   const minutes = Math.floor(todayTime / 60);
   const seconds = todayTime % 60;
   const timeStr = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-  ctx.fillText(timeStr, 60, 1450);
+  ctx.fillText(timeStr, x(60), y(1450));
 
-  ctx.font = "16px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto";
+  ctx.font = font("normal", 16);
   ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
-  ctx.fillText("시간", 60, 1480);
+  ctx.fillText("시간", x(60), y(1480));
 
   // 총 운동일
   ctx.fillStyle = "white";
-  ctx.font = "22px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto";
+  ctx.font = font("normal", 22);
   const totalDaysText = totalDays < 0 ? "TBD" : `${totalDays}일`;
-  ctx.fillText(totalDaysText, 60, 1600);
+  ctx.fillText(totalDaysText, x(60), y(1600));
 
-  ctx.font = "16px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto";
+  ctx.font = font("normal", 16);
   ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
-  ctx.fillText("총 운동일", 60, 1630);
+  ctx.fillText("총 운동일", x(60), y(1630));
 
   // ====== 우하단 ======
   ctx.textAlign = "right";
 
   // 칼로리
   ctx.fillStyle = "white";
-  ctx.font = "22px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto";
-  ctx.fillText(`${calories.toFixed(1)}kcal`, canvas.width - 60, 1450);
+  ctx.font = font("normal", 22);
+  ctx.fillText(`${calories.toFixed(1)}kcal`, canvas.width - x(60), y(1450));
 
-  ctx.font = "16px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto";
+  ctx.font = font("normal", 16);
   ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
-  ctx.fillText("활동 칼로리", canvas.width - 60, 1480);
+  ctx.fillText("활동 칼로리", canvas.width - x(60), y(1480));
 
   // 누적 반복수
   ctx.fillStyle = "white";
-  ctx.font = "22px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto";
+  ctx.font = font("normal", 22);
   const totalRepsText = totalReps < 0 ? "TBD" : `${totalReps}개`;
-  ctx.fillText(totalRepsText, canvas.width - 60, 1600);
+  ctx.fillText(totalRepsText, canvas.width - x(60), y(1600));
 
-  ctx.font = "16px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto";
+  ctx.font = font("normal", 16);
   ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
-  ctx.fillText("전체", canvas.width - 60, 1630);
+  ctx.fillText("전체", canvas.width - x(60), y(1630));
 
   return new Promise((resolve, reject) => {
     canvas.toBlob(
