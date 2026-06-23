@@ -3,9 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIcon,
+  CalendarCheckIcon,
   CheckIcon,
+  FlameIcon,
   RotateCcwIcon,
   Share2Icon,
+  UserRoundIcon,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -13,10 +16,32 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { createSquatMotionProfile, evaluateSquatMotion, type MotionStage, type SquatMotionProfile, type SquatMotionState } from "@/lib/squat-motion";
+import { SQUAT_USERS, getSquatUserName, isSquatUserId, type SquatUserId } from "@/lib/squat-users";
 import { generateShareImage } from "@/lib/share-image";
+import { getLocalIsoDate, getMonthCalendarDays } from "@/lib/workout-summary";
 
 type WorkoutPhase = "setup" | "countdown" | "active" | "complete";
 type SensorStatus = "idle" | "listening" | "unsupported" | "blocked";
+type SummaryStatus = "idle" | "loading" | "ready" | "error";
+type SaveStatus = "idle" | "saving" | "saved" | "error";
+
+interface WorkoutSummary {
+  completionDates: string[];
+  currentStreak: number;
+  todayCompleted: boolean;
+  totalDays: number;
+  totalReps: number;
+}
+
+const squatUserStorageKey = "squatUserId";
+
+const emptyWorkoutSummary: WorkoutSummary = {
+  completionDates: [],
+  currentStreak: 0,
+  todayCompleted: false,
+  totalDays: 0,
+  totalReps: 0,
+};
 
 function formatDuration(totalSeconds: number) {
   const minutes = Math.floor(totalSeconds / 60);
@@ -80,6 +105,10 @@ function speakMilestone(count: number, goal: number) {
 }
 
 export function SquatCoachApp() {
+  const [selectedUserId, setSelectedUserId] = useState<SquatUserId>("jooyoung");
+  const [workoutSummary, setWorkoutSummary] = useState<WorkoutSummary>(emptyWorkoutSummary);
+  const [summaryStatus, setSummaryStatus] = useState<SummaryStatus>("idle");
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [goal, setGoal] = useState(100);
   const [goalInput, setGoalInput] = useState("100");
   const [count, setCount] = useState(0);
@@ -103,7 +132,13 @@ export function SquatCoachApp() {
   const motionProfileRef = useRef<SquatMotionProfile>(createSquatMotionProfile());
   const listenerAttachedRef = useRef(false);
   const workoutStartedAtRef = useRef<number | null>(null);
+  const lastSavedCompletionRef = useRef<string | null>(null);
 
+  const todayIsoDate = useMemo(() => getLocalIsoDate(), []);
+  const calendarDays = useMemo(() => getMonthCalendarDays(todayIsoDate.slice(0, 7)), [todayIsoDate]);
+  const completedDateSet = useMemo(() => new Set(workoutSummary.completionDates), [workoutSummary.completionDates]);
+  const selectedUserName = getSquatUserName(selectedUserId);
+  const currentMonthLabel = `${Number(todayIsoDate.slice(5, 7))}월`;
   const progress = Math.min(100, Math.round((count / goal) * 100));
   const elapsedTimeText = formatDuration(elapsedSeconds);
   const normalizedGoal = Number(goalInput);
@@ -112,6 +147,83 @@ export function SquatCoachApp() {
     () => `오늘 스쿼트 ${count}개 완료! 목표 ${goal}개 중 ${progress}% 달성했어요. 운동 시간 ${elapsedTimeText}.`,
     [count, elapsedTimeText, goal, progress]
   );
+
+  const loadWorkoutSummary = useCallback(async (userId: SquatUserId) => {
+    setSummaryStatus("loading");
+
+    try {
+      const response = await fetch(`/api/workouts/summary?userId=${userId}&today=${todayIsoDate}`);
+
+      if (!response.ok) {
+        throw new Error("Failed to load workout summary.");
+      }
+
+      const summary = await response.json() as WorkoutSummary;
+      setWorkoutSummary({ ...emptyWorkoutSummary, ...summary });
+      setSummaryStatus("ready");
+    } catch {
+      setWorkoutSummary(emptyWorkoutSummary);
+      setSummaryStatus("error");
+    }
+  }, [todayIsoDate]);
+
+  const saveWorkoutCompletion = useCallback(async () => {
+    setSaveStatus("saving");
+
+    try {
+      const response = await fetch("/api/workouts/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: selectedUserId,
+          workoutDate: todayIsoDate,
+          goal,
+          count,
+          elapsedSeconds,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to save workout completion.");
+      }
+
+      const summary = await response.json() as Partial<WorkoutSummary>;
+      setWorkoutSummary((currentSummary) => ({ ...currentSummary, ...summary, todayCompleted: true }));
+      setSaveStatus("saved");
+      await loadWorkoutSummary(selectedUserId);
+    } catch {
+      setSaveStatus("error");
+    }
+  }, [count, elapsedSeconds, goal, loadWorkoutSummary, selectedUserId, todayIsoDate]);
+
+  useEffect(() => {
+    const storedUserId = window.localStorage.getItem(squatUserStorageKey);
+
+    if (isSquatUserId(storedUserId)) {
+      setSelectedUserId(storedUserId);
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(squatUserStorageKey, selectedUserId);
+    setSaveStatus("idle");
+    void loadWorkoutSummary(selectedUserId);
+  }, [loadWorkoutSummary, selectedUserId]);
+
+  useEffect(() => {
+    if (phase !== "complete" || count <= 0) {
+      return;
+    }
+
+    const completionKey = `${selectedUserId}:${todayIsoDate}:${goal}:${count}:${elapsedSeconds}`;
+
+    if (lastSavedCompletionRef.current === completionKey) {
+      return;
+    }
+
+    lastSavedCompletionRef.current = completionKey;
+    void saveWorkoutCompletion();
+  }, [count, elapsedSeconds, goal, phase, saveWorkoutCompletion, selectedUserId, todayIsoDate]);
 
   const addSquat = useCallback((source: "manual" | "sensor" = "manual") => {
     setLastMove("squat");
@@ -263,6 +375,8 @@ export function SquatCoachApp() {
     setGoal(normalizedGoal);
     activeGoalRef.current = normalizedGoal;
     setCount(0);
+    setSaveStatus("idle");
+    lastSavedCompletionRef.current = null;
     setPhase("countdown");
     setLastMove("ready");
     setMotionStage("steady");
@@ -351,8 +465,8 @@ export function SquatCoachApp() {
         todayReps: count,
         todayTime: elapsedSeconds,
         calories: calories,
-        totalDays: -1, // DB 미연결이므로 TBD
-        totalReps: -1, // DB 미연결이므로 TBD
+        totalDays: workoutSummary.totalDays,
+        totalReps: workoutSummary.totalReps,
       });
 
       const shareImageFile = new File([shareImageBlob], "squat-coach-record.png", {
@@ -390,10 +504,16 @@ export function SquatCoachApp() {
     <main className="coach-shell min-h-svh overflow-hidden text-foreground">
       <section className="mx-auto flex min-h-svh w-full max-w-[430px] flex-col px-5 py-5">
         <header className="flex justify-center pb-5 pt-1 text-center">
-          <h1 className="coach-wordmark" aria-label="Squat Coach">
-            <span aria-hidden="true" className="coach-wordmark-main">Squat</span>
-            <span aria-hidden="true" className="coach-wordmark-accent">Coach</span>
-          </h1>
+          <div className="flex flex-col items-center gap-2">
+            <h1 className="coach-wordmark" aria-label="Squat Coach">
+              <span aria-hidden="true" className="coach-wordmark-main">Squat</span>
+              <span aria-hidden="true" className="coach-wordmark-accent">Coach</span>
+            </h1>
+            <Badge variant="secondary" className="gap-1.5 rounded-full px-3 py-1">
+              <UserRoundIcon className="size-3.5" aria-hidden="true" />
+              {selectedUserName}
+            </Badge>
+          </div>
         </header>
 
         <div className="flex flex-1 items-stretch pb-3">
@@ -404,6 +524,39 @@ export function SquatCoachApp() {
                   <div className="flex flex-col gap-3 pt-2">
                     <p className="max-w-[11ch] text-[2.15rem] font-semibold leading-[1.05] text-[var(--coach-ink)]">스쿼트 몇 개 할까요?</p>
                     <div className="h-1 w-12 rounded-full bg-[var(--coach-accent)]" aria-hidden="true" />
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2" aria-label="사용자 선택">
+                    {SQUAT_USERS.map((user) => (
+                      <Button
+                        key={user.id}
+                        type="button"
+                        variant={selectedUserId === user.id ? "default" : "outline"}
+                        className="h-11 rounded-full px-2"
+                        onClick={() => setSelectedUserId(user.id)}
+                      >
+                        {user.name}
+                      </Button>
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-center">
+                    <div className="rounded-2xl bg-[var(--coach-surface)] p-4">
+                      <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
+                        <CalendarCheckIcon className="size-3.5" aria-hidden="true" />
+                        오늘
+                      </div>
+                      <p className="mt-1 text-lg font-semibold text-[var(--coach-ink)]">
+                        {workoutSummary.todayCompleted ? "완료" : "아직"}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl bg-[var(--coach-surface)] p-4">
+                      <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
+                        <FlameIcon className="size-3.5" aria-hidden="true" />
+                        연속
+                      </div>
+                      <p className="mt-1 text-lg font-semibold text-[var(--coach-ink)]">{workoutSummary.currentStreak}일</p>
+                    </div>
                   </div>
 
                   <div className="coach-target-panel flex min-h-[228px] flex-col items-center justify-center rounded-[1.5rem] px-6 text-center">
@@ -430,6 +583,44 @@ export function SquatCoachApp() {
                       />
                     </Field>
                   </FieldGroup>
+
+                  <div className="rounded-2xl bg-[var(--coach-surface)] p-4">
+                    <div className="mb-3 flex items-center justify-between">
+                      <p className="text-sm font-semibold text-[var(--coach-ink)]">{currentMonthLabel} 완료</p>
+                      <p className="text-xs text-muted-foreground">
+                        {summaryStatus === "loading" ? "불러오는 중" : `${workoutSummary.totalDays}일`}
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-7 gap-1 text-center text-[0.68rem] font-medium text-muted-foreground">
+                      {["일", "월", "화", "수", "목", "금", "토"].map((weekday) => (
+                        <span key={weekday}>{weekday}</span>
+                      ))}
+                    </div>
+                    <div className="mt-2 grid grid-cols-7 gap-1">
+                      {calendarDays.map((day, index) => {
+                        const isCompleted = day !== null && completedDateSet.has(day);
+                        const isToday = day === todayIsoDate;
+
+                        return (
+                          <div
+                            key={day ?? `empty-${index}`}
+                            className={`grid aspect-square place-items-center rounded-full text-xs font-semibold ${
+                              isCompleted
+                                ? "bg-[var(--coach-accent)] text-white"
+                                : isToday
+                                  ? "border border-[var(--coach-accent)] text-[var(--coach-ink)]"
+                                  : "text-muted-foreground"
+                            }`}
+                          >
+                            {day ? Number(day.slice(8, 10)) : ""}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {summaryStatus === "error" && (
+                      <p className="mt-3 text-xs text-muted-foreground">Vercel DB 환경변수를 연결하면 기록이 저장됩니다.</p>
+                    )}
+                  </div>
                 </div>
 
                 <Button type="button" size="lg" className="h-14 rounded-full" onClick={startWorkout} disabled={!isGoalValid}>
@@ -543,6 +734,21 @@ export function SquatCoachApp() {
                 <div className="rounded-2xl bg-[var(--coach-surface)] p-5">
                   <p className="text-4xl font-semibold text-[var(--coach-ink)]">{count} / {goal}</p>
                   <p className="mt-2 text-sm text-muted-foreground">달성률 {progress}% · 운동 시간 {elapsedTimeText}</p>
+                  <div className="mt-4 grid grid-cols-2 gap-3 text-center">
+                    <div className="rounded-2xl bg-[var(--coach-panel)] p-3">
+                      <p className="text-xs text-muted-foreground">연속 운동</p>
+                      <p className="mt-1 text-xl font-semibold text-[var(--coach-ink)]">{workoutSummary.currentStreak}일</p>
+                    </div>
+                    <div className="rounded-2xl bg-[var(--coach-panel)] p-3">
+                      <p className="text-xs text-muted-foreground">누적 완료</p>
+                      <p className="mt-1 text-xl font-semibold text-[var(--coach-ink)]">{workoutSummary.totalDays}일</p>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    {saveStatus === "saving" && "오늘 기록 저장 중"}
+                    {saveStatus === "saved" && `${selectedUserName}님의 오늘 완료 기록을 저장했어요.`}
+                    {saveStatus === "error" && "DB 연결 후 오늘 기록을 저장할 수 있어요."}
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
