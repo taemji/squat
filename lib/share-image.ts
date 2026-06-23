@@ -1,6 +1,6 @@
 /**
  * Canvas API를 사용해 공유용 이미지 생성
- * 배경 이미지 원본 크기 위에 텍스트를 얹은 PNG를 생성
+ * workout-bg-mark.png 기준의 정사각형 레이아웃 위에 기록 텍스트를 얹은 PNG를 생성
  */
 
 interface ShareImageProps {
@@ -11,6 +11,8 @@ interface ShareImageProps {
   totalReps?: number;
 }
 
+const CANVAS_SIZE = 1920;
+
 function loadBackgroundImage() {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const backgroundImg = new Image();
@@ -18,6 +20,12 @@ function loadBackgroundImage() {
     backgroundImg.onerror = reject;
     backgroundImg.src = `/workout-bg.png?v=${Date.now()}`;
   });
+}
+
+function getCanvasFontFamily() {
+  const cssFontFamily = getComputedStyle(document.body).getPropertyValue("--font-sans").trim();
+
+  return cssFontFamily || "'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 }
 
 export async function generateShareImage(props: ShareImageProps): Promise<Blob> {
@@ -28,23 +36,21 @@ export async function generateShareImage(props: ShareImageProps): Promise<Blob> 
 
   try {
     backgroundImg = await loadBackgroundImage();
-    canvas.width = backgroundImg.naturalWidth;
-    canvas.height = backgroundImg.naturalHeight;
   } catch {
-    canvas.width = 1080;
-    canvas.height = 1920;
+    backgroundImg = null;
   }
+
+  canvas.width = CANVAS_SIZE;
+  canvas.height = CANVAS_SIZE;
 
   const ctx = canvas.getContext("2d");
   if (!ctx) {
     throw new Error("Failed to get canvas context");
   }
 
-  // 1. 배경 이미지 로드 및 그리기
   if (backgroundImg) {
-    ctx.drawImage(backgroundImg, 0, 0);
+    ctx.drawImage(backgroundImg, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
   } else {
-    // 배경 이미지 로드 실패 시 그라디언트 폴백
     const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
     gradient.addColorStop(0, "#9b6bb8");
     gradient.addColorStop(0.5, "#8b5fbf");
@@ -53,81 +59,83 @@ export async function generateShareImage(props: ShareImageProps): Promise<Blob> 
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
 
-  // 2. 반투명 오버레이 (텍스트 가독성)
-  ctx.fillStyle = "rgba(0, 0, 0, 0.15)";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const fontFamily = getCanvasFontFamily();
+  const font = (weight: number, size: number) => `${weight} ${size}px ${fontFamily}`;
+  const white = "rgba(255, 255, 255, 0.96)";
+  const mutedWhite = "rgba(255, 255, 255, 0.78)";
 
-  const scaleX = canvas.width / 1080;
-  const scaleY = canvas.height / 1920;
-  const scale = Math.min(scaleX, scaleY);
-  const x = (value: number) => value * scaleX;
-  const y = (value: number) => value * scaleY;
-  const font = (weight: "bold" | "normal", size: number) => `${weight} ${Math.round(size * scale)}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto`;
+  ctx.textBaseline = "alphabetic";
+  ctx.fillStyle = white;
 
-  // 3. 텍스트 색상
-  ctx.fillStyle = "white";
-
-  // ====== 좌상단 ======
-  // 로고/타이틀
-  ctx.font = font("bold", 28);
+  ctx.font = font(800, 78);
   ctx.textAlign = "left";
-  ctx.fillText("🏋️ Squat Coach", x(60), y(100));
+  ctx.fillText("Squat Coach", 220, 188);
 
-  // 날짜
-  ctx.font = font("normal", 18);
-  const today = new Date().toLocaleDateString("ko-KR").replace(/\./g, ".").slice(0, -1);
-  ctx.fillText(today, x(60), y(140));
+  ctx.beginPath();
+  ctx.arc(140, 152, 44, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(255, 255, 255, 0.18)";
+  ctx.fill();
+  ctx.fillStyle = white;
+  ctx.font = font(900, 58);
+  ctx.fillText("S", 122, 173);
 
-  // ====== 중앙 (큰 숫자) ======
-  ctx.font = font("bold", 120);
-  ctx.textAlign = "center";
-  ctx.fillText(`${todayReps}개`, canvas.width / 2, y(600));
+  const today = new Date().toLocaleDateString("ko-KR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).replace(/\. /g, ".").replace(/\.$/, "");
 
-  // ====== 좌하단 ======
+  ctx.textAlign = "right";
+  ctx.fillStyle = mutedWhite;
+  ctx.font = font(500, 36);
+  ctx.fillText("TODAY", 1830, 164);
+  ctx.fillStyle = white;
+  ctx.font = font(700, 52);
+  ctx.fillText(today, 1830, 230);
+
   ctx.textAlign = "left";
-  
-  // 운동 시간
-  ctx.font = font("normal", 22);
+  ctx.fillStyle = white;
+  ctx.font = font(900, 380);
+  ctx.fillText(String(todayReps), 92, 870);
+
+  ctx.font = font(800, 76);
+  ctx.fillText("개", 650, 850);
+
+  ctx.fillStyle = mutedWhite;
+  ctx.font = font(600, 44);
+  ctx.fillText("오늘의 스쿼트", 98, 980);
+
   const minutes = Math.floor(todayTime / 60);
   const seconds = todayTime % 60;
   const timeStr = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-  ctx.fillText(timeStr, x(60), y(1450));
-
-  ctx.font = font("normal", 16);
-  ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
-  ctx.fillText("시간", x(60), y(1480));
-
-  // 총 운동일
-  ctx.fillStyle = "white";
-  ctx.font = font("normal", 22);
   const totalDaysText = totalDays < 0 ? "TBD" : `${totalDays}일`;
-  ctx.fillText(totalDaysText, x(60), y(1600));
-
-  ctx.font = font("normal", 16);
-  ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
-  ctx.fillText("총 운동일", x(60), y(1630));
-
-  // ====== 우하단 ======
-  ctx.textAlign = "right";
-
-  // 칼로리
-  ctx.fillStyle = "white";
-  ctx.font = font("normal", 22);
-  ctx.fillText(`${calories.toFixed(1)}kcal`, canvas.width - x(60), y(1450));
-
-  ctx.font = font("normal", 16);
-  ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
-  ctx.fillText("활동 칼로리", canvas.width - x(60), y(1480));
-
-  // 누적 반복수
-  ctx.fillStyle = "white";
-  ctx.font = font("normal", 22);
   const totalRepsText = totalReps < 0 ? "TBD" : `${totalReps}개`;
-  ctx.fillText(totalRepsText, canvas.width - x(60), y(1600));
+  const stats = [
+    { value: timeStr, label: "시간" },
+    { value: totalDaysText, label: "총 운동일" },
+    { value: `${calories.toFixed(1)}kcal`, label: "활동 칼로리" },
+    { value: totalRepsText, label: "전체" },
+  ];
 
-  ctx.font = font("normal", 16);
-  ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
-  ctx.fillText("전체", canvas.width - x(60), y(1630));
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.42)";
+  ctx.lineWidth = 3;
+  for (const dividerX of [520, 920, 1392]) {
+    ctx.beginPath();
+    ctx.moveTo(dividerX, 1644);
+    ctx.lineTo(dividerX, 1854);
+    ctx.stroke();
+  }
+
+  for (const [index, stat] of stats.entries()) {
+    const center = [320, 720, 1156, 1624][index];
+    ctx.textAlign = "center";
+    ctx.fillStyle = white;
+    ctx.font = font(800, 82);
+    ctx.fillText(stat.value, center, 1698);
+    ctx.fillStyle = mutedWhite;
+    ctx.font = font(600, 40);
+    ctx.fillText(stat.label, center, 1794);
+  }
 
   return new Promise((resolve, reject) => {
     canvas.toBlob(
