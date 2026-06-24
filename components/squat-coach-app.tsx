@@ -15,7 +15,18 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { createSquatMotionProfile, evaluateSquatMotion, type MotionStage, type SquatMotionProfile, type SquatMotionState } from "@/lib/squat-motion";
+import {
+  averageMotionVector,
+  createSquatMotionProfile,
+  createVerticalTravelTracker,
+  evaluateSquatMotion,
+  measureVerticalTravel,
+  type MotionStage,
+  type MotionVector,
+  type SquatMotionProfile,
+  type SquatMotionState,
+  type VerticalTravelTracker,
+} from "@/lib/squat-motion";
 import { SQUAT_USERS, getSquatUserName, isSquatUserId, type SquatUserId } from "@/lib/squat-users";
 import { generateShareImage } from "@/lib/share-image";
 import { getLocalIsoDate, getMonthCalendarDays } from "@/lib/workout-summary";
@@ -121,12 +132,11 @@ export function SquatCoachApp() {
   const [, setCalibrationProgress] = useState(0);
   const [countdownValue, setCountdownValue] = useState<3 | 2 | 1 | 0>(3);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const baselineRef = useRef<number | null>(null);
-  const orientationBaselineRef = useRef<{ beta: number; gamma: number } | null>(null);
-  const orientationRef = useRef<{ beta: number | null; gamma: number | null }>({ beta: null, gamma: null });
-  const calibrationSamplesRef = useRef<number[]>([]);
+  const gravityBaselineRef = useRef<MotionVector | null>(null);
+  const calibrationSamplesRef = useRef<MotionVector[]>([]);
   const calibrationUntilRef = useRef(0);
   const isCalibratingRef = useRef(false);
+  const verticalTravelTrackerRef = useRef<VerticalTravelTracker>(createVerticalTravelTracker());
   const activeGoalRef = useRef(goal);
   const motionStateRef = useRef<SquatMotionState>("standing");
   const motionProfileRef = useRef<SquatMotionProfile>(createSquatMotionProfile());
@@ -251,17 +261,6 @@ export function SquatCoachApp() {
     });
   }, []);
 
-  const handleOrientation = useCallback((event: DeviceOrientationEvent) => {
-    orientationRef.current = {
-      beta: event.beta,
-      gamma: event.gamma,
-    };
-
-    if (!orientationBaselineRef.current && event.beta !== null && event.gamma !== null) {
-      orientationBaselineRef.current = { beta: event.beta, gamma: event.gamma };
-    }
-  }, []);
-
   const handleMotion = useCallback((event: DeviceMotionEvent) => {
     const acceleration = event.accelerationIncludingGravity ?? event.acceleration;
 
@@ -272,20 +271,21 @@ export function SquatCoachApp() {
     const x = acceleration.x ?? 0;
     const y = acceleration.y ?? 0;
     const z = acceleration.z ?? 0;
-    const magnitude = Math.sqrt(x * x + y * y + z * z);
+    const vector = { x, y, z };
 
     if (isCalibratingRef.current || (calibrationUntilRef.current > 0 && calibrationUntilRef.current > event.timeStamp)) {
       if (calibrationUntilRef.current <= 0) {
         calibrationUntilRef.current = event.timeStamp + 2500;
       }
 
-      calibrationSamplesRef.current.push(magnitude);
+      calibrationSamplesRef.current.push(vector);
       const remainingMs = Math.max(calibrationUntilRef.current - event.timeStamp, 0);
       setCalibrationProgress(Math.min(100, Math.round(((2500 - remainingMs) / 2500) * 100)));
 
       if (remainingMs === 0) {
         const samples = calibrationSamplesRef.current;
-        baselineRef.current = samples.reduce((sum, sample) => sum + sample, 0) / Math.max(samples.length, 1);
+        gravityBaselineRef.current = averageMotionVector(samples);
+        verticalTravelTrackerRef.current = createVerticalTravelTracker(gravityBaselineRef.current);
         isCalibratingRef.current = false;
         setIsCalibrating(false);
         setCalibrationProgress(100);
@@ -296,22 +296,19 @@ export function SquatCoachApp() {
       return;
     }
 
-    if (!baselineRef.current) {
-      baselineRef.current = magnitude;
+    if (!gravityBaselineRef.current) {
+      gravityBaselineRef.current = vector;
+      verticalTravelTrackerRef.current = createVerticalTravelTracker(vector);
+      return;
     }
 
-    baselineRef.current = baselineRef.current * 0.96 + magnitude * 0.04;
-    const movement = Math.abs(magnitude - baselineRef.current);
-    const beta = orientationRef.current.beta;
-    const gamma = orientationRef.current.gamma;
-    const orientationBaseline = orientationBaselineRef.current;
-    const tiltDelta = beta !== null && gamma !== null && orientationBaseline
-      ? Math.abs(beta - orientationBaseline.beta) + Math.abs(gamma - orientationBaseline.gamma)
-      : 0;
-    const motionScore = movement + tiltDelta / 24;
-    setMotionLevel(Math.min(100, Math.round(motionScore * 20)));
+    const measuredTravel = measureVerticalTravel(verticalTravelTrackerRef.current, vector, event.timeStamp);
+    verticalTravelTrackerRef.current = measuredTravel.tracker;
 
-    const nextMotion = evaluateSquatMotion(motionStateRef.current, tiltDelta, motionProfileRef.current);
+    const verticalTravel = measuredTravel.verticalTravel;
+    setMotionLevel(Math.min(100, Math.round(verticalTravel * 12)));
+
+    const nextMotion = evaluateSquatMotion(motionStateRef.current, verticalTravel, motionProfileRef.current);
 
     if (nextMotion.state !== motionStateRef.current && nextMotion.state === "down") {
       setLastMove("squat");
@@ -344,20 +341,8 @@ export function SquatCoachApp() {
         }
       }
 
-      const DeviceOrientation = window.DeviceOrientationEvent as DeviceOrientationEventConstructorWithPermission | undefined;
-
-      if (typeof DeviceOrientation?.requestPermission === "function") {
-        const permission = await DeviceOrientation.requestPermission();
-
-        if (permission !== "granted") {
-          setSensorStatus("blocked");
-          return;
-        }
-      }
-
       if (!listenerAttachedRef.current) {
         window.addEventListener("devicemotion", handleMotion, { passive: true });
-        window.addEventListener("deviceorientation", handleOrientation, { passive: true });
         listenerAttachedRef.current = true;
       }
 
@@ -365,7 +350,7 @@ export function SquatCoachApp() {
     } catch {
       setSensorStatus("blocked");
     }
-  }, [handleMotion, handleOrientation]);
+  }, [handleMotion]);
 
   const startWorkout = useCallback(async () => {
     if (!isGoalValid) {
@@ -381,11 +366,11 @@ export function SquatCoachApp() {
     setLastMove("ready");
     setMotionStage("steady");
     setMotionLevel(0);
-    baselineRef.current = null;
-    orientationBaselineRef.current = null;
+    gravityBaselineRef.current = null;
     calibrationSamplesRef.current = [];
     calibrationUntilRef.current = 0;
     isCalibratingRef.current = true;
+    verticalTravelTrackerRef.current = createVerticalTravelTracker();
     motionStateRef.current = "standing";
     motionProfileRef.current = createSquatMotionProfile();
     workoutStartedAtRef.current = null;
@@ -451,9 +436,8 @@ export function SquatCoachApp() {
   useEffect(() => {
     return () => {
       window.removeEventListener("devicemotion", handleMotion);
-      window.removeEventListener("deviceorientation", handleOrientation);
     };
-  }, [handleMotion, handleOrientation]);
+  }, [handleMotion]);
 
   async function shareResult() {
     try {
@@ -778,10 +762,5 @@ declare global {
 
 interface DeviceMotionEventConstructorWithPermission {
   new (type: string, eventInitDict?: DeviceMotionEventInit): DeviceMotionEvent;
-  requestPermission?: () => Promise<"granted" | "denied">;
-}
-
-interface DeviceOrientationEventConstructorWithPermission {
-  new (type: string, eventInitDict?: DeviceOrientationEventInit): DeviceOrientationEvent;
   requestPermission?: () => Promise<"granted" | "denied">;
 }
