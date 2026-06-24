@@ -10,6 +10,20 @@ test("home page loads", async ({ page }) => {
   await expect(page.getByText("100")).toBeVisible();
 });
 
+test("page shows the cumulative chart between the calendar and start button", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 667 });
+  await page.goto("/");
+
+  const cumulativeChart = page.getByLabel("누적기록 차트");
+  await cumulativeChart.scrollIntoViewIfNeeded();
+
+  await expect(cumulativeChart).toBeVisible();
+  await expect(cumulativeChart.getByText("민지")).toBeVisible();
+  await expect(cumulativeChart.getByText("주영")).toBeVisible();
+  await expect(cumulativeChart.getByText("동훈")).toBeVisible();
+  await expect(page.getByRole("button", { name: /시작하기/ })).toBeVisible();
+});
+
 test("start flow shows countdown before workout", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: /시작하기/ }).click();

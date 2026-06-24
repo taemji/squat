@@ -23,6 +23,7 @@ import { getLocalIsoDate, getMonthCalendarDays } from "@/lib/workout-summary";
 type WorkoutPhase = "setup" | "countdown" | "active" | "complete";
 type SensorStatus = "idle" | "listening" | "unsupported" | "blocked";
 type SummaryStatus = "idle" | "loading" | "ready" | "error";
+type UserTotalsStatus = "idle" | "loading" | "ready" | "error";
 type SaveStatus = "idle" | "saving" | "saved" | "error";
 
 interface WorkoutSummary {
@@ -30,6 +31,12 @@ interface WorkoutSummary {
   currentStreak: number;
   todayCompleted: boolean;
   totalDays: number;
+  totalReps: number;
+}
+
+interface UserTotalSummary {
+  userId: SquatUserId;
+  userName: string;
   totalReps: number;
 }
 
@@ -108,6 +115,8 @@ export function SquatCoachApp() {
   const [selectedUserId, setSelectedUserId] = useState<SquatUserId>("jooyoung");
   const [workoutSummary, setWorkoutSummary] = useState<WorkoutSummary>(emptyWorkoutSummary);
   const [summaryStatus, setSummaryStatus] = useState<SummaryStatus>("idle");
+  const [userTotals, setUserTotals] = useState<UserTotalSummary[]>([]);
+  const [userTotalsStatus, setUserTotalsStatus] = useState<UserTotalsStatus>("idle");
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [goal, setGoal] = useState(100);
   const [goalInput, setGoalInput] = useState("100");
@@ -137,6 +146,8 @@ export function SquatCoachApp() {
   const todayIsoDate = useMemo(() => getLocalIsoDate(), []);
   const calendarDays = useMemo(() => getMonthCalendarDays(todayIsoDate.slice(0, 7)), [todayIsoDate]);
   const completedDateSet = useMemo(() => new Set(workoutSummary.completionDates), [workoutSummary.completionDates]);
+  const userTotalById = useMemo(() => new Map(userTotals.map((userTotal) => [userTotal.userId, userTotal])), [userTotals]);
+  const maxUserTotalReps = useMemo(() => Math.max(1, ...userTotals.map((userTotal) => userTotal.totalReps)), [userTotals]);
   const selectedUserName = getSquatUserName(selectedUserId);
   const currentMonthLabel = `${Number(todayIsoDate.slice(5, 7))}월`;
   const progress = Math.min(100, Math.round((count / goal) * 100));
@@ -167,6 +178,25 @@ export function SquatCoachApp() {
     }
   }, [todayIsoDate]);
 
+  const loadUserTotals = useCallback(async () => {
+    setUserTotalsStatus("loading");
+
+    try {
+      const response = await fetch("/api/workouts/totals");
+
+      if (!response.ok) {
+        throw new Error("Failed to load workout totals.");
+      }
+
+      const summary = await response.json() as { userTotals?: UserTotalSummary[] };
+      setUserTotals(summary.userTotals ?? []);
+      setUserTotalsStatus("ready");
+    } catch {
+      setUserTotals([]);
+      setUserTotalsStatus("error");
+    }
+  }, []);
+
   const saveWorkoutCompletion = useCallback(async () => {
     setSaveStatus("saving");
 
@@ -191,10 +221,15 @@ export function SquatCoachApp() {
       setWorkoutSummary((currentSummary) => ({ ...currentSummary, ...summary, todayCompleted: true }));
       setSaveStatus("saved");
       await loadWorkoutSummary(selectedUserId);
+      await loadUserTotals();
     } catch {
       setSaveStatus("error");
     }
-  }, [count, elapsedSeconds, goal, loadWorkoutSummary, selectedUserId, todayIsoDate]);
+  }, [count, elapsedSeconds, goal, loadUserTotals, loadWorkoutSummary, selectedUserId, todayIsoDate]);
+
+  useEffect(() => {
+    void loadUserTotals();
+  }, [loadUserTotals]);
 
   useEffect(() => {
     const storedUserId = window.localStorage.getItem(squatUserStorageKey);
@@ -501,7 +536,7 @@ export function SquatCoachApp() {
   }
 
   return (
-    <main className="coach-shell min-h-svh overflow-hidden text-foreground">
+    <main className="coach-shell min-h-svh text-foreground">
       <section className="mx-auto flex min-h-svh w-full max-w-[430px] flex-col px-5 py-5">
         <header className="flex justify-center pb-5 pt-1 text-center">
           <div className="flex flex-col items-center gap-2">
@@ -516,10 +551,10 @@ export function SquatCoachApp() {
           </div>
         </header>
 
-        <div className="flex flex-1 items-stretch pb-3">
-          <section className="coach-card flex w-full flex-col overflow-hidden rounded-[2rem] border border-[var(--coach-line)] bg-[var(--coach-panel)]">
+        <div className="pb-3">
+          <section className="coach-card flex w-full flex-col rounded-[2rem] border border-[var(--coach-line)] bg-[var(--coach-panel)]">
             {phase === "setup" && (
-              <div className="flex min-h-[calc(100svh-8rem)] flex-col justify-between gap-8 p-6">
+              <div className="flex flex-col gap-8 p-6">
                 <div className="flex flex-col gap-7">
                   <div className="flex flex-col gap-3 pt-2">
                     <p className="max-w-[11ch] text-[2.15rem] font-semibold leading-[1.05] text-[var(--coach-ink)]">스쿼트 몇 개 할까요?</p>
@@ -619,6 +654,35 @@ export function SquatCoachApp() {
                     </div>
                     {summaryStatus === "error" && (
                       <p className="mt-3 text-xs text-muted-foreground">Vercel DB 환경변수를 연결하면 기록이 저장됩니다.</p>
+                    )}
+                  </div>
+
+                  <div className="rounded-2xl bg-[var(--coach-surface)] p-4" aria-label="누적기록 차트">
+                    <div className="mb-4 flex items-center justify-between">
+                      <p className="text-sm font-semibold text-[var(--coach-ink)]">누적기록 차트</p>
+                      <p className="text-xs text-muted-foreground">
+                        {userTotalsStatus === "loading" ? "불러오는 중" : "전체"}
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      {SQUAT_USERS.map((user) => {
+                        const userTotal = userTotalById.get(user.id);
+                        const totalReps = userTotal?.totalReps ?? 0;
+                        const totalProgress = Math.round((totalReps / maxUserTotalReps) * 100);
+
+                        return (
+                          <div key={user.id} className="grid grid-cols-[3.25rem_1fr_3rem] items-center gap-2">
+                            <p className="truncate text-sm font-semibold text-[var(--coach-ink)]">{user.name}</p>
+                            <div className="h-4 overflow-hidden rounded-full bg-[var(--coach-panel)]" aria-label={`${user.name} 누적 ${totalReps}개`}>
+                              <div className="h-full rounded-full bg-[var(--coach-accent)]" style={{ width: `${totalProgress}%` }} />
+                            </div>
+                            <p className="text-right text-sm font-semibold text-[var(--coach-ink)]">{totalReps}</p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {userTotalsStatus === "error" && (
+                      <p className="mt-3 text-xs text-muted-foreground">DB 연결 후 유저별 누적 차트를 볼 수 있어요.</p>
                     )}
                   </div>
                 </div>
