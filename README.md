@@ -24,6 +24,28 @@ bun dev
 
 [http://localhost:3000](http://localhost:3000)에서 결과를 확인할 수 있습니다.
 
+### iPhone Safari 센서 테스트
+
+iPhone Safari에서 모션 센서 기반 카운트를 테스트할 때는 HTTPS 개발 서버를 사용합니다. 실행할 때마다 현재 LAN IP로 임시 인증서를 생성합니다.
+
+```bash
+bun run dev:https
+```
+
+출력된 `https://<LAN_IP>:3000` 주소로 iPhone에서 접속합니다. 임시 self-signed 인증서라 Safari에서 경고가 뜰 수 있습니다.
+
+LAN IP 자동 감지가 맞지 않으면 직접 지정할 수 있습니다.
+
+```bash
+LAN_IP=192.168.1.167 bun run dev:https
+```
+
+Windows PowerShell에서는 다음처럼 지정합니다.
+
+```powershell
+$env:LAN_IP="192.168.1.167"; bun run dev:https
+```
+
 E2E 테스트를 처음 실행하기 전에 Chromium을 설치합니다:
 
 ```bash
