@@ -13,9 +13,13 @@ export const metadata: Metadata = {
   title: "Squat Coach",
   description: "Mobile squat counter with motion-based form tracking",
   icons: {
-    icon: "/icon.png",
-    shortcut: "/icon.png",
-    apple: "/icon.png",
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+      { url: "/icon.png", sizes: "800x800", type: "image/png" },
+    ],
+    shortcut: [{ url: "/icon-192.png", type: "image/png" }],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
 };
 
