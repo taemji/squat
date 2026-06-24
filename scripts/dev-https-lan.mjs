@@ -131,10 +131,10 @@ const certificate = createSelfSignedCertificate(lanHost);
 writeFileSync(keyFile, certificate.keyPem, { mode: 0o600 });
 writeFileSync(certFile, certificate.certPem, { mode: 0o600 });
 
-console.log("HTTPS dev server for iPhone Safari sensor testing:");
+console.log("HTTPS dev server for mobile browser sensor testing:");
 console.log(`  Local:  https://localhost:${port}`);
 console.log(`  LAN:    https://${lanHost}:${port}`);
-console.log("Safari may show a self-signed certificate warning on first access.");
+console.log("Mobile browsers may show a self-signed certificate warning on first access.");
 console.log("Set LAN_IP=<address> to override automatic LAN IP detection.\n");
 
 const nextArgs = [
