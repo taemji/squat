@@ -11,12 +11,19 @@ interface WorkoutCompletionRecord {
   completedAt: string;
 }
 
+class MissingRedisConfigError extends Error {
+  constructor() {
+    super("Upstash Redis environment variables are not configured.");
+    this.name = "MissingRedisConfigError";
+  }
+}
+
 function getRedisClient() {
   const url = process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN;
 
   if (!url || !token) {
-    throw new Error("Upstash Redis environment variables are not configured.");
+    throw new MissingRedisConfigError();
   }
 
   return new Redis({ url, token });
@@ -84,7 +91,9 @@ export async function POST(request: Request) {
       totalReps,
     });
   } catch (error) {
-    console.error("Failed to save workout completion:", error);
+    if (!(error instanceof MissingRedisConfigError)) {
+      console.error("Failed to save workout completion:", error);
+    }
 
     return NextResponse.json({ error: "Workout database is not configured yet." }, { status: 503 });
   }

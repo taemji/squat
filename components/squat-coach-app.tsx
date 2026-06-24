@@ -11,17 +11,39 @@ import {
   UserRoundIcon,
 } from "lucide-react";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { createSquatMotionProfile, evaluateSquatMotion, type MotionStage, type SquatMotionProfile, type SquatMotionState } from "@/lib/squat-motion";
+import {
+  averageMotionVector,
+  createSquatMotionProfile,
+  createVerticalTravelTracker,
+  evaluateSquatMotion,
+  measureVerticalTravel,
+  type MotionStage,
+  type MotionVector,
+  type SquatMotionProfile,
+  type SquatMotionState,
+  type VerticalTravelTracker,
+} from "@/lib/squat-motion";
 import { SQUAT_USERS, getSquatUserName, isSquatUserId, type SquatUserId } from "@/lib/squat-users";
 import { generateShareImage } from "@/lib/share-image";
 import { getLocalIsoDate, getMonthCalendarDays } from "@/lib/workout-summary";
 
 type WorkoutPhase = "setup" | "countdown" | "active" | "complete";
-type SensorStatus = "idle" | "listening" | "unsupported" | "blocked";
+type SensorStatus = "idle" | "probing" | "listening" | "unsupported" | "blocked" | "unavailable";
 type SummaryStatus = "idle" | "loading" | "ready" | "error";
 type UserTotalsStatus = "idle" | "loading" | "ready" | "error";
 type SaveStatus = "idle" | "saving" | "saved" | "error";
@@ -41,6 +63,7 @@ interface UserTotalSummary {
 }
 
 const squatUserStorageKey = "squatUserId";
+const sensorProbeTimeoutMs = 1800;
 
 const emptyWorkoutSummary: WorkoutSummary = {
   completionDates: [],
@@ -111,6 +134,70 @@ function speakMilestone(count: number, goal: number) {
   }
 }
 
+function getSensorButtonLabel(status: SensorStatus) {
+  if (status === "listening") {
+    return "센서 연결됨";
+  }
+
+  if (status === "probing") {
+    return "센서 확인 중";
+  }
+
+  if (status === "blocked") {
+    return "센서 권한 필요";
+  }
+
+  if (status === "unsupported") {
+    return "센서 미지원";
+  }
+
+  return "센서 켜기";
+}
+
+function getSensorAlertTitle(status: SensorStatus) {
+  if (status === "unsupported") {
+    return "센서를 사용할 수 없어요";
+  }
+
+  if (status === "unavailable") {
+    return "센서 신호가 없어요";
+  }
+
+  return "센서 권한이 필요해요";
+}
+
+function getSensorAlertDescription(status: SensorStatus) {
+  if (status === "unsupported") {
+    return "이 브라우저나 기기에서는 모션 센서를 지원하지 않습니다. 수동 +1 버튼으로 기록해 주세요.";
+  }
+
+  if (status === "unavailable") {
+    return "센서 권한은 요청했지만 실제 모션 신호가 들어오지 않았습니다. 휴대폰에서 HTTPS 주소로 접속했는지 확인한 뒤 다시 확인해 주세요.";
+  }
+
+  return "권한 요청을 취소하거나 거부하면 브라우저가 거부 상태를 저장할 수 있습니다. 브라우저의 사이트 설정에서 모션 센서 권한을 허용하거나 권한을 초기화한 뒤 다시 접속해 주세요.";
+}
+
+function normalizeAccelerationValue(value: number | null) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function canRetrySensorFromAlert(status: SensorStatus) {
+  return status === "unavailable";
+}
+
+function getSensorRetryLabel(status: SensorStatus) {
+  return status === "unavailable" ? "다시 확인" : "다시 요청";
+}
+
+function getSensorButtonClass(status: SensorStatus) {
+  if (status === "listening") {
+    return "border-emerald-500 text-emerald-700 shadow-[0_0_0_3px_rgba(16,185,129,0.16)] motion-safe:animate-pulse";
+  }
+
+  return "border-destructive/60 text-destructive";
+}
+
 export function SquatCoachApp() {
   const [selectedUserId, setSelectedUserId] = useState<SquatUserId>("jooyoung");
   const [workoutSummary, setWorkoutSummary] = useState<WorkoutSummary>(emptyWorkoutSummary);
@@ -124,22 +211,24 @@ export function SquatCoachApp() {
   const [phase, setPhase] = useState<WorkoutPhase>("setup");
   const [, setLastMove] = useState<"ready" | "squat" | "cheer">("ready");
   const [sensorStatus, setSensorStatus] = useState<SensorStatus>("idle");
+  const [sensorAlertOpen, setSensorAlertOpen] = useState(false);
   const [, setMotionLevel] = useState(0);
   const [, setMotionStage] = useState<MotionStage>("steady");
   const [, setIsCalibrating] = useState(false);
   const [, setCalibrationProgress] = useState(0);
   const [countdownValue, setCountdownValue] = useState<3 | 2 | 1 | 0>(3);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const baselineRef = useRef<number | null>(null);
-  const orientationBaselineRef = useRef<{ beta: number; gamma: number } | null>(null);
-  const orientationRef = useRef<{ beta: number | null; gamma: number | null }>({ beta: null, gamma: null });
-  const calibrationSamplesRef = useRef<number[]>([]);
+  const gravityBaselineRef = useRef<MotionVector | null>(null);
+  const calibrationSamplesRef = useRef<MotionVector[]>([]);
   const calibrationUntilRef = useRef(0);
   const isCalibratingRef = useRef(false);
+  const verticalTravelTrackerRef = useRef<VerticalTravelTracker>(createVerticalTravelTracker());
   const activeGoalRef = useRef(goal);
   const motionStateRef = useRef<SquatMotionState>("standing");
   const motionProfileRef = useRef<SquatMotionProfile>(createSquatMotionProfile());
   const listenerAttachedRef = useRef(false);
+  const sensorProbeTimeoutRef = useRef<number | null>(null);
+  const hasReceivedMotionSampleRef = useRef(false);
   const workoutStartedAtRef = useRef<number | null>(null);
   const lastSavedCompletionRef = useRef<string | null>(null);
 
@@ -260,6 +349,15 @@ export function SquatCoachApp() {
     void saveWorkoutCompletion();
   }, [count, elapsedSeconds, goal, phase, saveWorkoutCompletion, selectedUserId, todayIsoDate]);
 
+  const clearSensorProbeTimeout = useCallback(() => {
+    if (sensorProbeTimeoutRef.current === null) {
+      return;
+    }
+
+    window.clearTimeout(sensorProbeTimeoutRef.current);
+    sensorProbeTimeoutRef.current = null;
+  }, []);
+
   const addSquat = useCallback((source: "manual" | "sensor" = "manual") => {
     setLastMove("squat");
 
@@ -286,17 +384,6 @@ export function SquatCoachApp() {
     });
   }, []);
 
-  const handleOrientation = useCallback((event: DeviceOrientationEvent) => {
-    orientationRef.current = {
-      beta: event.beta,
-      gamma: event.gamma,
-    };
-
-    if (!orientationBaselineRef.current && event.beta !== null && event.gamma !== null) {
-      orientationBaselineRef.current = { beta: event.beta, gamma: event.gamma };
-    }
-  }, []);
-
   const handleMotion = useCallback((event: DeviceMotionEvent) => {
     const acceleration = event.accelerationIncludingGravity ?? event.acceleration;
 
@@ -304,23 +391,38 @@ export function SquatCoachApp() {
       return;
     }
 
-    const x = acceleration.x ?? 0;
-    const y = acceleration.y ?? 0;
-    const z = acceleration.z ?? 0;
-    const magnitude = Math.sqrt(x * x + y * y + z * z);
+    const hasAccelerationValue = [acceleration.x, acceleration.y, acceleration.z].some(
+      (value) => typeof value === "number" && Number.isFinite(value)
+    );
+
+    if (!hasAccelerationValue) {
+      return;
+    }
+
+    if (!hasReceivedMotionSampleRef.current) {
+      hasReceivedMotionSampleRef.current = true;
+      clearSensorProbeTimeout();
+      setSensorStatus("listening");
+    }
+
+    const x = normalizeAccelerationValue(acceleration.x);
+    const y = normalizeAccelerationValue(acceleration.y);
+    const z = normalizeAccelerationValue(acceleration.z);
+    const vector = { x, y, z };
 
     if (isCalibratingRef.current || (calibrationUntilRef.current > 0 && calibrationUntilRef.current > event.timeStamp)) {
       if (calibrationUntilRef.current <= 0) {
         calibrationUntilRef.current = event.timeStamp + 2500;
       }
 
-      calibrationSamplesRef.current.push(magnitude);
+      calibrationSamplesRef.current.push(vector);
       const remainingMs = Math.max(calibrationUntilRef.current - event.timeStamp, 0);
       setCalibrationProgress(Math.min(100, Math.round(((2500 - remainingMs) / 2500) * 100)));
 
       if (remainingMs === 0) {
         const samples = calibrationSamplesRef.current;
-        baselineRef.current = samples.reduce((sum, sample) => sum + sample, 0) / Math.max(samples.length, 1);
+        gravityBaselineRef.current = averageMotionVector(samples);
+        verticalTravelTrackerRef.current = createVerticalTravelTracker(gravityBaselineRef.current);
         isCalibratingRef.current = false;
         setIsCalibrating(false);
         setCalibrationProgress(100);
@@ -331,22 +433,19 @@ export function SquatCoachApp() {
       return;
     }
 
-    if (!baselineRef.current) {
-      baselineRef.current = magnitude;
+    if (!gravityBaselineRef.current) {
+      gravityBaselineRef.current = vector;
+      verticalTravelTrackerRef.current = createVerticalTravelTracker(vector);
+      return;
     }
 
-    baselineRef.current = baselineRef.current * 0.96 + magnitude * 0.04;
-    const movement = Math.abs(magnitude - baselineRef.current);
-    const beta = orientationRef.current.beta;
-    const gamma = orientationRef.current.gamma;
-    const orientationBaseline = orientationBaselineRef.current;
-    const tiltDelta = beta !== null && gamma !== null && orientationBaseline
-      ? Math.abs(beta - orientationBaseline.beta) + Math.abs(gamma - orientationBaseline.gamma)
-      : 0;
-    const motionScore = movement + tiltDelta / 24;
-    setMotionLevel(Math.min(100, Math.round(motionScore * 20)));
+    const measuredTravel = measureVerticalTravel(verticalTravelTrackerRef.current, vector, event.timeStamp);
+    verticalTravelTrackerRef.current = measuredTravel.tracker;
 
-    const nextMotion = evaluateSquatMotion(motionStateRef.current, tiltDelta, motionProfileRef.current);
+    const verticalTravel = measuredTravel.verticalTravel;
+    setMotionLevel(Math.min(100, Math.round(verticalTravel * 12)));
+
+    const nextMotion = evaluateSquatMotion(motionStateRef.current, verticalTravel, motionProfileRef.current);
 
     if (nextMotion.state !== motionStateRef.current && nextMotion.state === "down") {
       setLastMove("squat");
@@ -359,11 +458,15 @@ export function SquatCoachApp() {
     if (nextMotion.completedRep) {
       addSquat("sensor");
     }
-  }, [addSquat]);
+  }, [addSquat, clearSensorProbeTimeout]);
 
-  const connectMotionSensor = useCallback(async () => {
+  const connectMotionSensor = useCallback(async (showSignalAlert = false) => {
+    clearSensorProbeTimeout();
+    hasReceivedMotionSampleRef.current = false;
+
     if (!("DeviceMotionEvent" in window)) {
       setSensorStatus("unsupported");
+      setSensorAlertOpen(true);
       return;
     }
 
@@ -375,32 +478,53 @@ export function SquatCoachApp() {
 
         if (permission !== "granted") {
           setSensorStatus("blocked");
-          return;
-        }
-      }
-
-      const DeviceOrientation = window.DeviceOrientationEvent as DeviceOrientationEventConstructorWithPermission | undefined;
-
-      if (typeof DeviceOrientation?.requestPermission === "function") {
-        const permission = await DeviceOrientation.requestPermission();
-
-        if (permission !== "granted") {
-          setSensorStatus("blocked");
+          setSensorAlertOpen(true);
           return;
         }
       }
 
       if (!listenerAttachedRef.current) {
         window.addEventListener("devicemotion", handleMotion, { passive: true });
-        window.addEventListener("deviceorientation", handleOrientation, { passive: true });
         listenerAttachedRef.current = true;
       }
 
-      setSensorStatus("listening");
+      setSensorStatus("probing");
+      sensorProbeTimeoutRef.current = window.setTimeout(() => {
+        sensorProbeTimeoutRef.current = null;
+
+        if (hasReceivedMotionSampleRef.current) {
+          return;
+        }
+
+        setSensorStatus("unavailable");
+
+        if (showSignalAlert) {
+          setSensorAlertOpen(true);
+        }
+      }, sensorProbeTimeoutMs);
     } catch {
       setSensorStatus("blocked");
+      setSensorAlertOpen(true);
     }
-  }, [handleMotion, handleOrientation]);
+  }, [clearSensorProbeTimeout, handleMotion]);
+
+  const handleSensorButtonClick = useCallback(async () => {
+    if (sensorStatus === "listening") {
+      return;
+    }
+
+    if (sensorStatus === "unsupported") {
+      setSensorAlertOpen(true);
+      return;
+    }
+
+    await connectMotionSensor(true);
+  }, [connectMotionSensor, sensorStatus]);
+
+  const handleSensorAlertRetry = useCallback(() => {
+    setSensorAlertOpen(false);
+    void connectMotionSensor(true);
+  }, [connectMotionSensor]);
 
   const startWorkout = useCallback(async () => {
     if (!isGoalValid) {
@@ -416,11 +540,11 @@ export function SquatCoachApp() {
     setLastMove("ready");
     setMotionStage("steady");
     setMotionLevel(0);
-    baselineRef.current = null;
-    orientationBaselineRef.current = null;
+    gravityBaselineRef.current = null;
     calibrationSamplesRef.current = [];
     calibrationUntilRef.current = 0;
     isCalibratingRef.current = true;
+    verticalTravelTrackerRef.current = createVerticalTravelTracker();
     motionStateRef.current = "standing";
     motionProfileRef.current = createSquatMotionProfile();
     workoutStartedAtRef.current = null;
@@ -485,10 +609,10 @@ export function SquatCoachApp() {
 
   useEffect(() => {
     return () => {
+      clearSensorProbeTimeout();
       window.removeEventListener("devicemotion", handleMotion);
-      window.removeEventListener("deviceorientation", handleOrientation);
     };
-  }, [handleMotion, handleOrientation]);
+  }, [clearSensorProbeTimeout, handleMotion]);
 
   async function shareResult() {
     try {
@@ -732,7 +856,23 @@ export function SquatCoachApp() {
                   <div className="flex flex-col gap-1">
                     <p className="text-2xl font-semibold leading-none text-[var(--coach-ink)]">스쿼트 수행</p>
                   </div>
-                  <Badge variant="secondary">{elapsedTimeText}</Badge>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className={`rounded-full ${getSensorButtonClass(sensorStatus)}`}
+                      onClick={handleSensorButtonClick}
+                      disabled={count >= goal}
+                      aria-label={getSensorButtonLabel(sensorStatus)}
+                      aria-pressed={sensorStatus === "listening"}
+                    >
+                      <ActivityIcon aria-hidden="true" />
+                    </Button>
+                    <Badge variant="secondary" className="h-8! min-w-14 rounded-full! px-3! text-sm! leading-none">
+                      {elapsedTimeText}
+                    </Badge>
+                  </div>
                 </div>
 
                 <div className="flex flex-1 flex-col items-center justify-center gap-7">
@@ -760,11 +900,7 @@ export function SquatCoachApp() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <Button type="button" variant="outline" className="rounded-full" onClick={connectMotionSensor} disabled={sensorStatus === "listening" || count >= goal}>
-                    <ActivityIcon data-icon="inline-start" />
-                    센서
-                  </Button>
+                <div className="grid grid-cols-3 gap-3">
                   <Button type="button" className="rounded-full" onClick={() => addSquat()} disabled={count >= goal}>
                     수동 +1
                   </Button>
@@ -777,6 +913,30 @@ export function SquatCoachApp() {
                 </div>
               </div>
             )}
+
+            <AlertDialog open={sensorAlertOpen} onOpenChange={setSensorAlertOpen}>
+              <AlertDialogContent size="sm">
+                <AlertDialogHeader>
+                  <AlertDialogMedia>
+                    <ActivityIcon aria-hidden="true" />
+                  </AlertDialogMedia>
+                  <AlertDialogTitle>{getSensorAlertTitle(sensorStatus)}</AlertDialogTitle>
+                  <AlertDialogDescription>{getSensorAlertDescription(sensorStatus)}</AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter className={canRetrySensorFromAlert(sensorStatus) ? undefined : "group-data-[size=sm]/alert-dialog-content:grid-cols-1"}>
+                  {canRetrySensorFromAlert(sensorStatus) ? (
+                    <>
+                      <AlertDialogCancel>닫기</AlertDialogCancel>
+                      <Button type="button" onClick={handleSensorAlertRetry}>
+                        {getSensorRetryLabel(sensorStatus)}
+                      </Button>
+                    </>
+                  ) : (
+                    <AlertDialogAction>확인</AlertDialogAction>
+                  )}
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
 
             {phase === "complete" && (
               <div className="flex min-h-[calc(100svh-8rem)] flex-col justify-between gap-7 p-6">
@@ -842,10 +1002,5 @@ declare global {
 
 interface DeviceMotionEventConstructorWithPermission {
   new (type: string, eventInitDict?: DeviceMotionEventInit): DeviceMotionEvent;
-  requestPermission?: () => Promise<"granted" | "denied">;
-}
-
-interface DeviceOrientationEventConstructorWithPermission {
-  new (type: string, eventInitDict?: DeviceOrientationEventInit): DeviceOrientationEvent;
   requestPermission?: () => Promise<"granted" | "denied">;
 }

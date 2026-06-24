@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:https": "node scripts/dev-https-lan.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -38,6 +39,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "jsdom": "^28.1.0",
+    "node-forge": "^1.4.0",
     "tailwindcss": "^4",
     "typescript": "^5",
     "@playwright/test": "^1.52.0",
