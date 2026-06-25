@@ -22,6 +22,7 @@ export interface PhoneMotionSample {
 const GRAVITY_MAGNITUDE = 9.81;
 const MOTION_THRESHOLD = 0.55;
 const QUIET_DRIFT_THRESHOLD = 0.18;
+const MIN_VERTICAL_ALIGNMENT = 0.55;
 const MIN_DIRECTION_GAP_MS = 90;
 const MAX_REP_GAP_MS = 1800;
 const REP_COOLDOWN_MS = 280;
@@ -107,11 +108,11 @@ export function measurePhoneMotion(
       return (delta.x * verticalUnit.x) + (delta.y * verticalUnit.y) + (delta.z * verticalUnit.z);
     })()
     : [delta.x, delta.y, delta.z].reduce((strongest, value) => Math.abs(value) > Math.abs(strongest) ? value : strongest, 0);
-  const strongestAxisMotion = [delta.x, delta.y, delta.z].reduce(
-    (strongest, value) => Math.abs(value) > Math.abs(strongest) ? value : strongest,
-    0
-  );
-  const measuredMotion = Math.abs(strongestAxisMotion) > Math.abs(signedMotion) ? strongestAxisMotion : signedMotion;
+  const totalMotion = Math.sqrt((delta.x * delta.x) + (delta.y * delta.y) + (delta.z * delta.z));
+  const verticalAlignment = totalMotion > 0 ? Math.abs(signedMotion) / totalMotion : 0;
+  const measuredMotion = baselineMagnitude >= GRAVITY_MAGNITUDE * 0.4 && verticalAlignment < MIN_VERTICAL_ALIGNMENT
+    ? 0
+    : signedMotion;
   const score = Math.abs(measuredMotion);
   const direction = score >= MOTION_THRESHOLD
     ? measuredMotion >= 0 ? "down" : "up"

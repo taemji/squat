@@ -133,14 +133,14 @@ describe("measurePhoneMotion", () => {
     expect(result.directions).toEqual(["down", null, "up"]);
   });
 
-  it("detects movement on the strongest changing axis in landscape grip", () => {
+  it("ignores sideways shaking in landscape grip", () => {
     const result = runPhoneMotionSequence({ x: 9.81, y: 0, z: 0 }, [
       { x: 9.81, y: 0.8, z: 0.1 },
       { x: 9.81, y: 0, z: 0 },
       { x: 9.81, y: -0.8, z: 0.1 },
     ]);
 
-    expect(result.directions).toEqual(["down", null, "up"]);
+    expect(result.directions).toEqual([null, null, null]);
   });
 
   it("falls back to the strongest axis when gravity is not included", () => {
