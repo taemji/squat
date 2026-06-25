@@ -43,7 +43,13 @@ describe("evaluateSquatMotion", () => {
   });
 
   it("counts after the phone moves down and then back up", () => {
-    const result = runDirectionSequence([null, "down", null, "up", null]);
+    const result = runMotionSequence([
+      { direction: null },
+      { direction: "down", score: 2.0 },
+      { direction: null },
+      { direction: "up", score: 1.9 },
+      { direction: null },
+    ]);
 
     expect(result.reps).toBe(1);
     expect(result.state).toBe("standing");
@@ -54,7 +60,7 @@ describe("evaluateSquatMotion", () => {
       { direction: null },
       { direction: "down", score: 2.4 },
       { direction: null },
-      { direction: "up", score: 0.7 },
+      { direction: "up", score: 1.8 },
       { direction: null },
     ]);
 
@@ -62,13 +68,24 @@ describe("evaluateSquatMotion", () => {
     expect(result.state).toBe("rising");
   });
 
+  it("does not count a tiny down-up flick", () => {
+    const result = runMotionSequence([
+      { direction: null },
+      { direction: "down", score: 0.8 },
+      { direction: "up", score: 0.8 },
+      { direction: null },
+    ]);
+
+    expect(result.reps).toBe(0);
+  });
+
   it("counts after multiple return samples reach near the start position", () => {
     const result = runMotionSequence([
       { direction: null },
       { direction: "down", score: 2.4 },
       { direction: null },
-      { direction: "up", score: 0.8 },
       { direction: "up", score: 1.0 },
+      { direction: "up", score: 1.2 },
       { direction: null },
     ]);
 
@@ -77,7 +94,13 @@ describe("evaluateSquatMotion", () => {
   });
 
   it("also counts when the first strong motion is upward and then downward", () => {
-    const result = runDirectionSequence([null, "up", null, "down", null]);
+    const result = runMotionSequence([
+      { direction: null },
+      { direction: "up", score: 2.0 },
+      { direction: null },
+      { direction: "down", score: 1.9 },
+      { direction: null },
+    ]);
 
     expect(result.reps).toBe(1);
     expect(result.state).toBe("standing");

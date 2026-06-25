@@ -26,8 +26,9 @@ const MIN_VERTICAL_ALIGNMENT = 0.55;
 const MIN_DIRECTION_GAP_MS = 90;
 const MAX_REP_GAP_MS = 1800;
 const REP_COOLDOWN_MS = 280;
-const RETURN_TO_START_RATIO = 0.58;
-const MIN_RETURN_SCORE = 0.7;
+const RETURN_TO_START_RATIO = 0.9;
+const MIN_OUTBOUND_SCORE = 1.7;
+const MIN_RETURN_SCORE = 1.5;
 
 export interface SquatMotionProfile {
   firstDirection: PhoneMotionDirection | null;
@@ -201,6 +202,7 @@ export function evaluateSquatMotion(
   if (
     motion.direction !== firstDirection
     && elapsedMs >= MIN_DIRECTION_GAP_MS
+    && outboundScore >= MIN_OUTBOUND_SCORE
     && returnScore >= Math.max(MIN_RETURN_SCORE, outboundScore * RETURN_TO_START_RATIO)
   ) {
     return {
