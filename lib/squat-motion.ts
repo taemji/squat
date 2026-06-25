@@ -25,10 +25,11 @@ const QUIET_DRIFT_THRESHOLD = 0.18;
 const MIN_VERTICAL_ALIGNMENT = 0.55;
 const MIN_DIRECTION_GAP_MS = 90;
 const MAX_REP_GAP_MS = 1800;
-const REP_COOLDOWN_MS = 280;
-const RETURN_TO_START_RATIO = 0.9;
-const MIN_OUTBOUND_SCORE = 1.7;
-const MIN_RETURN_SCORE = 1.5;
+const REP_COOLDOWN_MS = 850;
+const REQUIRED_SETTLE_SAMPLES = 2;
+const RETURN_TO_START_RATIO = 0.75;
+const MIN_OUTBOUND_SCORE = 1.2;
+const MIN_RETURN_SCORE = 1;
 
 export interface SquatMotionProfile {
   firstDirection: PhoneMotionDirection | null;
@@ -37,6 +38,7 @@ export interface SquatMotionProfile {
   strongestScore: number;
   outboundScore: number;
   returnScore: number;
+  settleSamples: number;
 }
 
 export interface SquatMotionResult {
@@ -54,8 +56,10 @@ export function createSquatMotionProfile(): SquatMotionProfile {
     strongestScore: 0,
     outboundScore: 0,
     returnScore: 0,
+    settleSamples: REQUIRED_SETTLE_SAMPLES,
   };
 }
+
 
 export function createPhoneMotionTracker(gravityBaseline: MotionVector | null = null): PhoneMotionTracker {
   return {
@@ -141,9 +145,13 @@ export function evaluateSquatMotion(
   profile: SquatMotionProfile = createSquatMotionProfile()
 ): SquatMotionResult {
   const strongestScore = Math.max(profile.strongestScore, motion.score);
-  const nextProfile = { ...profile, strongestScore };
+  const settleSamples = motion.direction ? 0 : Math.min(REQUIRED_SETTLE_SAMPLES, profile.settleSamples + 1);
+  const nextProfile = { ...profile, strongestScore, settleSamples };
 
-  if (motion.timestamp < profile.cooldownUntil) {
+  const isWaitingForNextRep = profile.firstDirection === null
+    && (motion.timestamp < profile.cooldownUntil || profile.settleSamples < REQUIRED_SETTLE_SAMPLES);
+
+  if (isWaitingForNextRep) {
     return { state: "standing", stage: "steady", completedRep: false, profile: nextProfile };
   }
 
@@ -174,6 +182,7 @@ export function evaluateSquatMotion(
         firstDirectionAt: motion.timestamp,
         outboundScore: motion.score,
         returnScore: 0,
+        settleSamples: 0,
       },
     };
   }
@@ -195,6 +204,7 @@ export function evaluateSquatMotion(
         firstDirectionAt: motion.timestamp,
         outboundScore: motion.score,
         returnScore: 0,
+        settleSamples: 0,
       },
     };
   }
@@ -216,6 +226,7 @@ export function evaluateSquatMotion(
         cooldownUntil: motion.timestamp + REP_COOLDOWN_MS,
         outboundScore: 0,
         returnScore: 0,
+        settleSamples: 0,
       },
     };
   }
@@ -224,6 +235,6 @@ export function evaluateSquatMotion(
     state: motion.direction !== firstDirection ? "rising" : currentState === "rising" ? "rising" : "down",
     stage: motion.direction !== firstDirection ? "rising" : currentState === "bottom" ? "bottom" : "descending",
     completedRep: false,
-    profile: { ...nextProfile, firstDirection, firstDirectionAt, outboundScore, returnScore },
+    profile: { ...nextProfile, firstDirection, firstDirectionAt, outboundScore, returnScore, settleSamples: 0 },
   };
 }

@@ -31,6 +31,26 @@ function runMotionSequence(motions: Array<{ direction: "down" | "up" | null; sco
   return { profile, state, reps };
 }
 
+function runMotionSequenceWithTiming(motions: Array<{ direction: "down" | "up" | null; score?: number; gapMs?: number }>) {
+  let state: SquatMotionState = "standing";
+  let profile: SquatMotionProfile = createSquatMotionProfile();
+  let reps = 0;
+  let timestamp = 0;
+
+  for (const motion of motions) {
+    timestamp += motion.gapMs ?? 160;
+    const result = evaluateSquatMotion(state, { direction: motion.direction, score: motion.score ?? (motion.direction ? 1.5 : 0), timestamp }, profile);
+    state = result.state;
+    profile = result.profile;
+
+    if (result.completedRep) {
+      reps += 1;
+    }
+  }
+
+  return { profile, state, reps };
+}
+
 function runDirectionSequence(directions: Array<"down" | "up" | null>) {
   return runMotionSequence(directions.map((direction) => ({ direction })));
 }
@@ -60,7 +80,7 @@ describe("evaluateSquatMotion", () => {
       { direction: null },
       { direction: "down", score: 2.4 },
       { direction: null },
-      { direction: "up", score: 1.8 },
+      { direction: "up", score: 1.6 },
       { direction: null },
     ]);
 
@@ -104,6 +124,33 @@ describe("evaluateSquatMotion", () => {
 
     expect(result.reps).toBe(1);
     expect(result.state).toBe("standing");
+  });
+
+  it("does not start another rep until motion settles after a count", () => {
+    const result = runMotionSequenceWithTiming([
+      { direction: null },
+      { direction: "down", score: 2.0 },
+      { direction: "up", score: 1.9 },
+      { direction: "down", score: 2.0, gapMs: 900 },
+      { direction: "up", score: 1.9 },
+    ]);
+
+    expect(result.reps).toBe(1);
+  });
+
+  it("counts the next rep after cooldown and quiet samples", () => {
+    const result = runMotionSequenceWithTiming([
+      { direction: null },
+      { direction: "down", score: 2.0 },
+      { direction: "up", score: 1.9 },
+      { direction: null, gapMs: 300 },
+      { direction: null },
+      { direction: null },
+      { direction: "down", score: 2.0, gapMs: 300 },
+      { direction: "up", score: 1.9 },
+    ]);
+
+    expect(result.reps).toBe(2);
   });
 });
 
