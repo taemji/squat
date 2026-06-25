@@ -25,12 +25,16 @@ const QUIET_DRIFT_THRESHOLD = 0.35;
 const MIN_DIRECTION_GAP_MS = 90;
 const MAX_REP_GAP_MS = 1800;
 const REP_COOLDOWN_MS = 350;
+const RETURN_TO_START_RATIO = 0.72;
+const MIN_RETURN_SCORE = 1.2;
 
 export interface SquatMotionProfile {
   firstDirection: PhoneMotionDirection | null;
   firstDirectionAt: number | null;
   cooldownUntil: number;
   strongestScore: number;
+  outboundScore: number;
+  returnScore: number;
 }
 
 export interface SquatMotionResult {
@@ -46,6 +50,8 @@ export function createSquatMotionProfile(): SquatMotionProfile {
     firstDirectionAt: null,
     cooldownUntil: 0,
     strongestScore: 0,
+    outboundScore: 0,
+    returnScore: 0,
   };
 }
 
@@ -143,6 +149,10 @@ export function evaluateSquatMotion(
       return { state: "bottom", stage: "bottom", completedRep: false, profile: nextProfile };
     }
 
+    if (currentState === "rising") {
+      return { state: "rising", stage: "rising", completedRep: false, profile: nextProfile };
+    }
+
     return { state: "standing", stage: "steady", completedRep: false, profile: nextProfile };
   }
 
@@ -151,24 +161,42 @@ export function evaluateSquatMotion(
       state: "down",
       stage: "descending",
       completedRep: false,
-      profile: { ...nextProfile, firstDirection: motion.direction, firstDirectionAt: motion.timestamp },
+      profile: {
+        ...nextProfile,
+        firstDirection: motion.direction,
+        firstDirectionAt: motion.timestamp,
+        outboundScore: motion.score,
+        returnScore: 0,
+      },
     };
   }
 
   const firstDirection = profile.firstDirection ?? motion.direction;
   const firstDirectionAt = profile.firstDirectionAt ?? motion.timestamp;
   const elapsedMs = motion.timestamp - firstDirectionAt;
+  const outboundScore = motion.direction === firstDirection ? profile.outboundScore + motion.score : profile.outboundScore;
+  const returnScore = motion.direction !== firstDirection ? profile.returnScore + motion.score : profile.returnScore;
 
   if (elapsedMs > MAX_REP_GAP_MS) {
     return {
       state: "down",
       stage: "descending",
       completedRep: false,
-      profile: { ...nextProfile, firstDirection: motion.direction, firstDirectionAt: motion.timestamp },
+      profile: {
+        ...nextProfile,
+        firstDirection: motion.direction,
+        firstDirectionAt: motion.timestamp,
+        outboundScore: motion.score,
+        returnScore: 0,
+      },
     };
   }
 
-  if (motion.direction !== firstDirection && elapsedMs >= MIN_DIRECTION_GAP_MS) {
+  if (
+    motion.direction !== firstDirection
+    && elapsedMs >= MIN_DIRECTION_GAP_MS
+    && returnScore >= Math.max(MIN_RETURN_SCORE, outboundScore * RETURN_TO_START_RATIO)
+  ) {
     return {
       state: "standing",
       stage: "rising",
@@ -178,14 +206,16 @@ export function evaluateSquatMotion(
         firstDirection: null,
         firstDirectionAt: null,
         cooldownUntil: motion.timestamp + REP_COOLDOWN_MS,
+        outboundScore: 0,
+        returnScore: 0,
       },
     };
   }
 
   return {
-    state: currentState === "rising" ? "rising" : "down",
-    stage: currentState === "bottom" ? "bottom" : "descending",
+    state: motion.direction !== firstDirection ? "rising" : currentState === "rising" ? "rising" : "down",
+    stage: motion.direction !== firstDirection ? "rising" : currentState === "bottom" ? "bottom" : "descending",
     completedRep: false,
-    profile: { ...nextProfile, firstDirection, firstDirectionAt },
+    profile: { ...nextProfile, firstDirection, firstDirectionAt, outboundScore, returnScore },
   };
 }

@@ -11,15 +11,15 @@ import {
   type SquatMotionState,
 } from "@/lib/squat-motion";
 
-function runDirectionSequence(directions: Array<"down" | "up" | null>) {
+function runMotionSequence(motions: Array<{ direction: "down" | "up" | null; score?: number }>) {
   let state: SquatMotionState = "standing";
   let profile: SquatMotionProfile = createSquatMotionProfile();
   let reps = 0;
   let timestamp = 0;
 
-  for (const direction of directions) {
+  for (const motion of motions) {
     timestamp += 160;
-    const result = evaluateSquatMotion(state, { direction, score: direction ? 1.5 : 0, timestamp }, profile);
+    const result = evaluateSquatMotion(state, { direction: motion.direction, score: motion.score ?? (motion.direction ? 1.5 : 0), timestamp }, profile);
     state = result.state;
     profile = result.profile;
 
@@ -31,6 +31,10 @@ function runDirectionSequence(directions: Array<"down" | "up" | null>) {
   return { profile, state, reps };
 }
 
+function runDirectionSequence(directions: Array<"down" | "up" | null>) {
+  return runMotionSequence(directions.map((direction) => ({ direction })));
+}
+
 describe("evaluateSquatMotion", () => {
   it("does not count movement in only one direction", () => {
     const result = runDirectionSequence([null, "down", "down", null, null]);
@@ -40,6 +44,33 @@ describe("evaluateSquatMotion", () => {
 
   it("counts after the phone moves down and then back up", () => {
     const result = runDirectionSequence([null, "down", null, "up", null]);
+
+    expect(result.reps).toBe(1);
+    expect(result.state).toBe("standing");
+  });
+
+  it("does not count until the return motion is close to the outbound motion", () => {
+    const result = runMotionSequence([
+      { direction: null },
+      { direction: "down", score: 2.4 },
+      { direction: null },
+      { direction: "up", score: 0.7 },
+      { direction: null },
+    ]);
+
+    expect(result.reps).toBe(0);
+    expect(result.state).toBe("rising");
+  });
+
+  it("counts after multiple return samples reach near the start position", () => {
+    const result = runMotionSequence([
+      { direction: null },
+      { direction: "down", score: 2.4 },
+      { direction: null },
+      { direction: "up", score: 0.8 },
+      { direction: "up", score: 1.0 },
+      { direction: null },
+    ]);
 
     expect(result.reps).toBe(1);
     expect(result.state).toBe("standing");
