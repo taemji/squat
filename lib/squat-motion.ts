@@ -20,13 +20,13 @@ export interface PhoneMotionSample {
 }
 
 const GRAVITY_MAGNITUDE = 9.81;
-const MOTION_THRESHOLD = 1.05;
-const QUIET_DRIFT_THRESHOLD = 0.35;
+const MOTION_THRESHOLD = 0.55;
+const QUIET_DRIFT_THRESHOLD = 0.18;
 const MIN_DIRECTION_GAP_MS = 90;
 const MAX_REP_GAP_MS = 1800;
-const REP_COOLDOWN_MS = 350;
-const RETURN_TO_START_RATIO = 0.72;
-const MIN_RETURN_SCORE = 1.2;
+const REP_COOLDOWN_MS = 280;
+const RETURN_TO_START_RATIO = 0.58;
+const MIN_RETURN_SCORE = 0.7;
 
 export interface SquatMotionProfile {
   firstDirection: PhoneMotionDirection | null;
@@ -107,9 +107,14 @@ export function measurePhoneMotion(
       return (delta.x * verticalUnit.x) + (delta.y * verticalUnit.y) + (delta.z * verticalUnit.z);
     })()
     : [delta.x, delta.y, delta.z].reduce((strongest, value) => Math.abs(value) > Math.abs(strongest) ? value : strongest, 0);
-  const score = Math.abs(signedMotion);
+  const strongestAxisMotion = [delta.x, delta.y, delta.z].reduce(
+    (strongest, value) => Math.abs(value) > Math.abs(strongest) ? value : strongest,
+    0
+  );
+  const measuredMotion = Math.abs(strongestAxisMotion) > Math.abs(signedMotion) ? strongestAxisMotion : signedMotion;
+  const score = Math.abs(measuredMotion);
   const direction = score >= MOTION_THRESHOLD
-    ? signedMotion >= 0 ? "down" : "up"
+    ? measuredMotion >= 0 ? "down" : "up"
     : null;
   const nextGravityBaseline = score <= QUIET_DRIFT_THRESHOLD
     ? {
