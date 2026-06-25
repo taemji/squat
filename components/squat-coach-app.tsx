@@ -28,15 +28,15 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
   averageMotionVector,
+  createPhoneMotionTracker,
   createSquatMotionProfile,
-  createVerticalTravelTracker,
   evaluateSquatMotion,
-  measureVerticalTravel,
+  measurePhoneMotion,
   type MotionStage,
   type MotionVector,
+  type PhoneMotionTracker,
   type SquatMotionProfile,
   type SquatMotionState,
-  type VerticalTravelTracker,
 } from "@/lib/squat-motion";
 import { SQUAT_USERS, getSquatUserName, isSquatUserId, type SquatUserId } from "@/lib/squat-users";
 import { generateShareImage } from "@/lib/share-image";
@@ -222,7 +222,7 @@ export function SquatCoachApp() {
   const calibrationSamplesRef = useRef<MotionVector[]>([]);
   const calibrationUntilRef = useRef(0);
   const isCalibratingRef = useRef(false);
-  const verticalTravelTrackerRef = useRef<VerticalTravelTracker>(createVerticalTravelTracker());
+  const phoneMotionTrackerRef = useRef<PhoneMotionTracker>(createPhoneMotionTracker());
   const activeGoalRef = useRef(goal);
   const motionStateRef = useRef<SquatMotionState>("standing");
   const motionProfileRef = useRef<SquatMotionProfile>(createSquatMotionProfile());
@@ -422,7 +422,7 @@ export function SquatCoachApp() {
       if (remainingMs === 0) {
         const samples = calibrationSamplesRef.current;
         gravityBaselineRef.current = averageMotionVector(samples);
-        verticalTravelTrackerRef.current = createVerticalTravelTracker(gravityBaselineRef.current);
+        phoneMotionTrackerRef.current = createPhoneMotionTracker(gravityBaselineRef.current);
         isCalibratingRef.current = false;
         setIsCalibrating(false);
         setCalibrationProgress(100);
@@ -435,17 +435,16 @@ export function SquatCoachApp() {
 
     if (!gravityBaselineRef.current) {
       gravityBaselineRef.current = vector;
-      verticalTravelTrackerRef.current = createVerticalTravelTracker(vector);
+      phoneMotionTrackerRef.current = createPhoneMotionTracker(vector);
       return;
     }
 
-    const measuredTravel = measureVerticalTravel(verticalTravelTrackerRef.current, vector, event.timeStamp);
-    verticalTravelTrackerRef.current = measuredTravel.tracker;
+    const measuredMotion = measurePhoneMotion(phoneMotionTrackerRef.current, vector, event.timeStamp);
+    phoneMotionTrackerRef.current = measuredMotion.tracker;
 
-    const verticalTravel = measuredTravel.verticalTravel;
-    setMotionLevel(Math.min(100, Math.round(verticalTravel * 12)));
+    setMotionLevel(Math.min(100, Math.round(measuredMotion.sample.score * 28)));
 
-    const nextMotion = evaluateSquatMotion(motionStateRef.current, verticalTravel, motionProfileRef.current);
+    const nextMotion = evaluateSquatMotion(motionStateRef.current, measuredMotion.sample, motionProfileRef.current);
 
     if (nextMotion.state !== motionStateRef.current && nextMotion.state === "down") {
       setLastMove("squat");
@@ -544,7 +543,7 @@ export function SquatCoachApp() {
     calibrationSamplesRef.current = [];
     calibrationUntilRef.current = 0;
     isCalibratingRef.current = true;
-    verticalTravelTrackerRef.current = createVerticalTravelTracker();
+    phoneMotionTrackerRef.current = createPhoneMotionTracker();
     motionStateRef.current = "standing";
     motionProfileRef.current = createSquatMotionProfile();
     workoutStartedAtRef.current = null;

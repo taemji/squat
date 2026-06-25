@@ -1,5 +1,6 @@
 export type MotionStage = "steady" | "descending" | "bottom" | "rising";
 export type SquatMotionState = "standing" | "down" | "bottom" | "rising";
+export type PhoneMotionDirection = "down" | "up";
 
 export interface MotionVector {
   x: number;
@@ -7,27 +8,29 @@ export interface MotionVector {
   z: number;
 }
 
-export interface VerticalTravelTracker {
+export interface PhoneMotionTracker {
   gravityBaseline: MotionVector | null;
-  velocity: number;
-  position: number;
   lastTimestamp: number | null;
 }
 
-const SQUAT_START_VERTICAL_TRAVEL = 3;
-const MIN_SQUAT_DEPTH_VERTICAL_TRAVEL = 7;
-const DEFAULT_SQUAT_DEPTH_VERTICAL_TRAVEL = 9;
-const PERSONAL_DEPTH_RATIO = 0.82;
-const SQUAT_RISE_RATIO = 0.58;
-const SQUAT_STAND_VERTICAL_TRAVEL = 2;
+export interface PhoneMotionSample {
+  direction: PhoneMotionDirection | null;
+  score: number;
+  timestamp: number;
+}
+
 const GRAVITY_MAGNITUDE = 9.81;
-const VERTICAL_TRAVEL_SCALE = 11;
-const VELOCITY_DAMPING = 0.9;
-const POSITION_DAMPING = 0.985;
+const MOTION_THRESHOLD = 1.05;
+const QUIET_DRIFT_THRESHOLD = 0.35;
+const MIN_DIRECTION_GAP_MS = 90;
+const MAX_REP_GAP_MS = 1800;
+const REP_COOLDOWN_MS = 350;
 
 export interface SquatMotionProfile {
-  targetDepthTravel: number;
-  deepestTravel: number;
+  firstDirection: PhoneMotionDirection | null;
+  firstDirectionAt: number | null;
+  cooldownUntil: number;
+  strongestScore: number;
 }
 
 export interface SquatMotionResult {
@@ -39,16 +42,16 @@ export interface SquatMotionResult {
 
 export function createSquatMotionProfile(): SquatMotionProfile {
   return {
-    targetDepthTravel: DEFAULT_SQUAT_DEPTH_VERTICAL_TRAVEL,
-    deepestTravel: 0,
+    firstDirection: null,
+    firstDirectionAt: null,
+    cooldownUntil: 0,
+    strongestScore: 0,
   };
 }
 
-export function createVerticalTravelTracker(gravityBaseline: MotionVector | null = null): VerticalTravelTracker {
+export function createPhoneMotionTracker(gravityBaseline: MotionVector | null = null): PhoneMotionTracker {
   return {
     gravityBaseline,
-    velocity: 0,
-    position: 0,
     lastTimestamp: null,
   };
 }
@@ -66,93 +69,123 @@ export function averageMotionVector(samples: MotionVector[]): MotionVector {
   );
 }
 
-export function measureVerticalTravel(
-  tracker: VerticalTravelTracker,
+export function measurePhoneMotion(
+  tracker: PhoneMotionTracker,
   acceleration: MotionVector,
   timestamp: number
-): { tracker: VerticalTravelTracker; verticalTravel: number } {
+): { tracker: PhoneMotionTracker; sample: PhoneMotionSample } {
   if (!tracker.gravityBaseline) {
     return {
       tracker: { ...tracker, gravityBaseline: acceleration, lastTimestamp: timestamp },
-      verticalTravel: 0,
+      sample: { direction: null, score: 0, timestamp },
     };
   }
 
   const gravityBaseline = tracker.gravityBaseline;
   const baselineMagnitude = Math.sqrt(
     gravityBaseline.x * gravityBaseline.x + gravityBaseline.y * gravityBaseline.y + gravityBaseline.z * gravityBaseline.z
-  ) || GRAVITY_MAGNITUDE;
-  const verticalUnit = {
-    x: gravityBaseline.x / baselineMagnitude,
-    y: gravityBaseline.y / baselineMagnitude,
-    z: gravityBaseline.z / baselineMagnitude,
+  );
+  const delta = {
+    x: acceleration.x - gravityBaseline.x,
+    y: acceleration.y - gravityBaseline.y,
+    z: acceleration.z - gravityBaseline.z,
   };
-  const verticalAcceleration = ((acceleration.x - gravityBaseline.x) * verticalUnit.x)
-    + ((acceleration.y - gravityBaseline.y) * verticalUnit.y)
-    + ((acceleration.z - gravityBaseline.z) * verticalUnit.z);
-  const elapsedSeconds = Math.min(Math.max((timestamp - (tracker.lastTimestamp ?? timestamp)) / 1000, 0), 0.08);
-  const velocity = (tracker.velocity + verticalAcceleration * elapsedSeconds) * VELOCITY_DAMPING;
-  const position = (tracker.position + velocity * elapsedSeconds * VERTICAL_TRAVEL_SCALE) * POSITION_DAMPING;
+  const signedMotion = baselineMagnitude >= GRAVITY_MAGNITUDE * 0.4
+    ? (() => {
+      const verticalUnit = {
+        x: gravityBaseline.x / baselineMagnitude,
+        y: gravityBaseline.y / baselineMagnitude,
+        z: gravityBaseline.z / baselineMagnitude,
+      };
+
+      return (delta.x * verticalUnit.x) + (delta.y * verticalUnit.y) + (delta.z * verticalUnit.z);
+    })()
+    : [delta.x, delta.y, delta.z].reduce((strongest, value) => Math.abs(value) > Math.abs(strongest) ? value : strongest, 0);
+  const score = Math.abs(signedMotion);
+  const direction = score >= MOTION_THRESHOLD
+    ? signedMotion >= 0 ? "down" : "up"
+    : null;
+  const nextGravityBaseline = score <= QUIET_DRIFT_THRESHOLD
+    ? {
+      x: gravityBaseline.x * 0.98 + acceleration.x * 0.02,
+      y: gravityBaseline.y * 0.98 + acceleration.y * 0.02,
+      z: gravityBaseline.z * 0.98 + acceleration.z * 0.02,
+    }
+    : gravityBaseline;
 
   return {
     tracker: {
-      gravityBaseline,
-      velocity,
-      position,
+      gravityBaseline: nextGravityBaseline,
       lastTimestamp: timestamp,
     },
-    verticalTravel: Math.abs(position),
+    sample: { direction, score, timestamp },
   };
 }
 
 export function evaluateSquatMotion(
   currentState: SquatMotionState,
-  verticalTravel: number,
+  motion: PhoneMotionSample,
   profile: SquatMotionProfile = createSquatMotionProfile()
 ): SquatMotionResult {
-  const deepestTravel = Math.max(profile.deepestTravel, verticalTravel);
-  const targetDepthTravel = Math.max(
-    MIN_SQUAT_DEPTH_VERTICAL_TRAVEL,
-    Math.min(DEFAULT_SQUAT_DEPTH_VERTICAL_TRAVEL, deepestTravel * PERSONAL_DEPTH_RATIO)
-  );
-  const riseTravel = Math.max(SQUAT_STAND_VERTICAL_TRAVEL + 1, targetDepthTravel * SQUAT_RISE_RATIO);
-  const nextProfile = { targetDepthTravel, deepestTravel };
+  const strongestScore = Math.max(profile.strongestScore, motion.score);
+  const nextProfile = { ...profile, strongestScore };
 
-  if (currentState === "standing") {
-    if (verticalTravel >= SQUAT_START_VERTICAL_TRAVEL) {
-      return { state: "down", stage: "descending", completedRep: false, profile: nextProfile };
+  if (motion.timestamp < profile.cooldownUntil) {
+    return { state: "standing", stage: "steady", completedRep: false, profile: nextProfile };
+  }
+
+  if (!motion.direction) {
+    if (currentState === "down") {
+      return { state: "bottom", stage: "bottom", completedRep: false, profile: nextProfile };
+    }
+
+    if (currentState === "bottom") {
+      return { state: "bottom", stage: "bottom", completedRep: false, profile: nextProfile };
     }
 
     return { state: "standing", stage: "steady", completedRep: false, profile: nextProfile };
   }
 
-  if (currentState === "down") {
-    if (verticalTravel >= targetDepthTravel) {
-      return { state: "bottom", stage: "bottom", completedRep: false, profile: nextProfile };
-    }
-
-    if (verticalTravel <= SQUAT_STAND_VERTICAL_TRAVEL) {
-      return { state: "standing", stage: "steady", completedRep: false, profile: nextProfile };
-    }
-
-    return { state: "down", stage: "descending", completedRep: false, profile: nextProfile };
+  if (currentState === "standing") {
+    return {
+      state: "down",
+      stage: "descending",
+      completedRep: false,
+      profile: { ...nextProfile, firstDirection: motion.direction, firstDirectionAt: motion.timestamp },
+    };
   }
 
-  if (currentState === "bottom") {
-    if (verticalTravel <= riseTravel) {
-      return { state: "rising", stage: "rising", completedRep: false, profile: nextProfile };
-    }
+  const firstDirection = profile.firstDirection ?? motion.direction;
+  const firstDirectionAt = profile.firstDirectionAt ?? motion.timestamp;
+  const elapsedMs = motion.timestamp - firstDirectionAt;
 
-    return { state: "bottom", stage: "bottom", completedRep: false, profile: nextProfile };
+  if (elapsedMs > MAX_REP_GAP_MS) {
+    return {
+      state: "down",
+      stage: "descending",
+      completedRep: false,
+      profile: { ...nextProfile, firstDirection: motion.direction, firstDirectionAt: motion.timestamp },
+    };
   }
 
-  if (verticalTravel <= SQUAT_STAND_VERTICAL_TRAVEL) {
-    return { state: "standing", stage: "steady", completedRep: true, profile: nextProfile };
+  if (motion.direction !== firstDirection && elapsedMs >= MIN_DIRECTION_GAP_MS) {
+    return {
+      state: "standing",
+      stage: "rising",
+      completedRep: true,
+      profile: {
+        ...nextProfile,
+        firstDirection: null,
+        firstDirectionAt: null,
+        cooldownUntil: motion.timestamp + REP_COOLDOWN_MS,
+      },
+    };
   }
 
-  if (verticalTravel >= targetDepthTravel) {
-    return { state: "bottom", stage: "bottom", completedRep: false, profile: nextProfile };
-  }
-
-  return { state: "rising", stage: "rising", completedRep: false, profile: nextProfile };
+  return {
+    state: currentState === "rising" ? "rising" : "down",
+    stage: currentState === "bottom" ? "bottom" : "descending",
+    completedRep: false,
+    profile: { ...nextProfile, firstDirection, firstDirectionAt },
+  };
 }

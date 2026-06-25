@@ -2,22 +2,24 @@ import { describe, expect, it } from "vitest";
 
 import {
   averageMotionVector,
+  createPhoneMotionTracker,
   createSquatMotionProfile,
-  createVerticalTravelTracker,
   evaluateSquatMotion,
-  measureVerticalTravel,
+  measurePhoneMotion,
   type MotionVector,
   type SquatMotionProfile,
   type SquatMotionState,
 } from "@/lib/squat-motion";
 
-function runVerticalTravelSequence(travelValues: number[]) {
+function runDirectionSequence(directions: Array<"down" | "up" | null>) {
   let state: SquatMotionState = "standing";
   let profile: SquatMotionProfile = createSquatMotionProfile();
   let reps = 0;
+  let timestamp = 0;
 
-  for (const travel of travelValues) {
-    const result = evaluateSquatMotion(state, travel, profile);
+  for (const direction of directions) {
+    timestamp += 160;
+    const result = evaluateSquatMotion(state, { direction, score: direction ? 1.5 : 0, timestamp }, profile);
     state = result.state;
     profile = result.profile;
 
@@ -30,45 +32,43 @@ function runVerticalTravelSequence(travelValues: number[]) {
 }
 
 describe("evaluateSquatMotion", () => {
-  it("does not count a shallow vertical dip", () => {
-    const result = runVerticalTravelSequence([0, 3.2, 5.4, 4.2, 1.8, 0]);
+  it("does not count movement in only one direction", () => {
+    const result = runDirectionSequence([null, "down", "down", null, null]);
 
     expect(result.reps).toBe(0);
-    expect(result.state).toBe("standing");
   });
 
-  it("counts after reaching squat depth by vertical travel and returning to standing", () => {
-    const result = runVerticalTravelSequence([0, 3.2, 6, 9.2, 7.4, 4.8, 1.6, 0]);
+  it("counts after the phone moves down and then back up", () => {
+    const result = runDirectionSequence([null, "down", null, "up", null]);
 
     expect(result.reps).toBe(1);
     expect(result.state).toBe("standing");
   });
 
-  it("adapts depth to the person's observed vertical range without counting shallow motion", () => {
-    const result = runVerticalTravelSequence([0, 3.2, 6.5, 10.5, 5.8, 1.6, 0, 3.2, 5.8, 8.7, 4.8, 1.6, 0]);
+  it("also counts when the first strong motion is upward and then downward", () => {
+    const result = runDirectionSequence([null, "up", null, "down", null]);
 
-    expect(result.profile.targetDepthTravel).toBeLessThan(9);
-    expect(result.reps).toBe(2);
+    expect(result.reps).toBe(1);
     expect(result.state).toBe("standing");
   });
 });
 
-function runVerticalSensorSequence(samples: MotionVector[]) {
-  let tracker = createVerticalTravelTracker({ x: 0, y: 0, z: 9.81 });
+function runPhoneMotionSequence(baseline: MotionVector, samples: MotionVector[]) {
+  let tracker = createPhoneMotionTracker(baseline);
   let timestamp = 0;
-  let maxTravel = 0;
+  const directions: Array<"down" | "up" | null> = [];
 
   for (const sample of samples) {
     timestamp += 80;
-    const result = measureVerticalTravel(tracker, sample, timestamp);
+    const result = measurePhoneMotion(tracker, sample, timestamp);
     tracker = result.tracker;
-    maxTravel = Math.max(maxTravel, result.verticalTravel);
+    directions.push(result.sample.direction);
   }
 
-  return { maxTravel, tracker };
+  return { directions, tracker };
 }
 
-describe("measureVerticalTravel", () => {
+describe("measurePhoneMotion", () => {
   it("averages calibration samples into a gravity baseline", () => {
     expect(averageMotionVector([
       { x: 0.2, y: -0.1, z: 9.7 },
@@ -76,17 +76,39 @@ describe("measureVerticalTravel", () => {
     ])).toEqual({ x: 0, y: 0, z: 9.8 });
   });
 
-  it("stays near zero while the phone is held still", () => {
-    const result = runVerticalSensorSequence(Array.from({ length: 20 }, () => ({ x: 0, y: 0, z: 9.81 })));
+  it("stays quiet while the phone is held still", () => {
+    const result = runPhoneMotionSequence({ x: 0, y: 0, z: 9.81 }, Array.from({ length: 20 }, () => ({ x: 0, y: 0, z: 9.81 })));
 
-    expect(result.maxTravel).toBeLessThan(0.1);
+    expect(result.directions.every((direction) => direction === null)).toBe(true);
   });
 
-  it("detects vertical travel from up and down phone movement", () => {
-    const downwardMotion = Array.from({ length: 16 }, () => ({ x: 0, y: 0, z: 18.5 }));
-    const upwardMotion = Array.from({ length: 16 }, () => ({ x: 0, y: 0, z: 1.2 }));
-    const result = runVerticalSensorSequence([...downwardMotion, ...upwardMotion]);
+  it("detects down then up movement when the phone is held flat", () => {
+    const result = runPhoneMotionSequence({ x: 0, y: 0, z: 9.81 }, [
+      { x: 0, y: 0, z: 11.4 },
+      { x: 0, y: 0, z: 9.81 },
+      { x: 0, y: 0, z: 8.2 },
+    ]);
 
-    expect(result.maxTravel).toBeGreaterThan(7);
+    expect(result.directions).toEqual(["down", null, "up"]);
+  });
+
+  it("detects down then up movement when the phone is held sideways", () => {
+    const result = runPhoneMotionSequence({ x: 9.81, y: 0, z: 0 }, [
+      { x: 11.4, y: 0, z: 0 },
+      { x: 9.81, y: 0, z: 0 },
+      { x: 8.2, y: 0, z: 0 },
+    ]);
+
+    expect(result.directions).toEqual(["down", null, "up"]);
+  });
+
+  it("falls back to the strongest axis when gravity is not included", () => {
+    const result = runPhoneMotionSequence({ x: 0, y: 0, z: 0 }, [
+      { x: 0, y: 1.7, z: 0.2 },
+      { x: 0, y: 0, z: 0 },
+      { x: 0, y: -1.7, z: 0.2 },
+    ]);
+
+    expect(result.directions).toEqual(["down", null, "up"]);
   });
 });
