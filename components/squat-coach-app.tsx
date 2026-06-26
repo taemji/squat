@@ -882,7 +882,7 @@ export function SquatCoachApp() {
                     <div className="grid size-[78%] place-items-center rounded-full bg-[var(--coach-panel)] text-center">
                       <div>
                         <p className="text-[6rem] font-semibold leading-none text-[var(--coach-ink)]">{count}</p>
-                        <p className="mt-2 text-sm text-muted-foreground">/ {goal} reps</p>
+                        <p className="mt-2 text-sm text-muted-foreground">{goal} reps</p>
                       </div>
                     </div>
                   </div>
