@@ -35,7 +35,7 @@ describe("sumWorkoutReps", () => {
 
   it("ignores missing record counts", () => {
     expect(sumWorkoutReps({
-      "2026-06-21": { goal: 100 },
+      "2026-06-21": {},
       "2026-06-22": null,
       "2026-06-23": { count: 25 },
     })).toBe(25);
