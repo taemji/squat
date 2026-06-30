@@ -113,7 +113,7 @@ describe("evaluateSquatMotion", () => {
     expect(result.state).toBe("standing");
   });
 
-  it("also counts when the first strong motion is upward and then downward", () => {
+  it("does not count when the first strong motion is upward and then downward", () => {
     const result = runMotionSequence([
       { direction: null },
       { direction: "up", score: 2.0 },
@@ -122,7 +122,7 @@ describe("evaluateSquatMotion", () => {
       { direction: null },
     ]);
 
-    expect(result.reps).toBe(1);
+    expect(result.reps).toBe(0);
     expect(result.state).toBe("standing");
   });
 

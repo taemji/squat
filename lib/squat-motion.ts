@@ -172,6 +172,10 @@ export function evaluateSquatMotion(
   }
 
   if (currentState === "standing") {
+    if (motion.direction !== "down") {
+      return { state: "standing", stage: "steady", completedRep: false, profile: nextProfile };
+    }
+
     return {
       state: "down",
       stage: "descending",
