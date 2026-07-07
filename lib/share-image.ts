@@ -132,9 +132,8 @@ export async function generateShareImage(props: ShareImageProps): Promise<Blob> 
   ctx.fillStyle = white;
   ctx.font = font(700, 52);
   ctx.fillText(today, 1830, 230);
-  ctx.fillStyle = mutedWhite;
-  ctx.font = font(600, 40);
-  ctx.fillText(currentTime, 1830, 284);
+  ctx.font = font(700, 52);
+  ctx.fillText(currentTime, 1830, 292);
 
   ctx.textAlign = "left";
   ctx.fillStyle = white;
