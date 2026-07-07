@@ -62,3 +62,26 @@ test("configured set plan drives workout and rest screen", async ({ page }) => {
   await page.getByRole("button", { name: "다음 세트" }).click();
   await expect(page.getByText("2/2 세트")).toBeVisible();
 });
+
+test("share flow asks which background to use", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("세트 수").fill("1");
+  await page.getByLabel("세트당 개수").fill("1");
+
+  await page.getByRole("button", { name: /시작하기/ }).click();
+  const sensorAlertConfirm = page.getByRole("button", { name: "확인" });
+
+  if (await sensorAlertConfirm.waitFor({ state: "visible", timeout: 1000 }).then(() => true).catch(() => false)) {
+    await sensorAlertConfirm.click();
+  }
+
+  await page.getByRole("button", { name: "바로 시작" }).click();
+  await page.getByRole("button", { name: "수동 +1" }).click();
+
+  await expect(page.getByRole("heading", { name: "1개 완료" })).toBeVisible();
+  await page.getByRole("button", { name: "공유" }).click();
+
+  await expect(page.getByRole("dialog", { name: "공유 배경 선택" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "workout-bg", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "workout-bg2", exact: true })).toBeVisible();
+});

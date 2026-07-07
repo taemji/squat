@@ -24,6 +24,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
@@ -39,7 +46,7 @@ import {
   type SquatMotionState,
 } from "@/lib/squat-motion";
 import { SQUAT_USERS, getSquatUserName, isSquatUserId, type SquatUserId } from "@/lib/squat-users";
-import { generateShareImage } from "@/lib/share-image";
+import { generateShareImage, type ShareImageBackground } from "@/lib/share-image";
 import { getLocalIsoDate, getMonthCalendarDays } from "@/lib/workout-summary";
 
 type WorkoutPhase = "setup" | "countdown" | "active" | "rest" | "complete";
@@ -68,6 +75,15 @@ const maxWorkoutSets = 20;
 const maxRepsPerSet = 999;
 const maxTotalGoal = 999;
 const maxRestSeconds = 3600;
+
+const shareBackgroundOptions: Array<{
+  id: ShareImageBackground;
+  label: string;
+  imageSrc: string;
+}> = [
+  { id: "workout-bg", label: "workout-bg", imageSrc: "/workout-bg.png" },
+  { id: "workout-bg2", label: "workout-bg2", imageSrc: "/workout-bg2" },
+];
 
 const emptyWorkoutSummary: WorkoutSummary = {
   completionDates: [],
@@ -209,6 +225,8 @@ export function SquatCoachApp() {
   const [userTotals, setUserTotals] = useState<UserTotalSummary[]>([]);
   const [userTotalsStatus, setUserTotalsStatus] = useState<UserTotalsStatus>("idle");
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
   const [setCountInput, setSetCountInput] = useState("5");
   const [repsPerSetInput, setRepsPerSetInput] = useState("20");
   const [restSecondsInput, setRestSecondsInput] = useState("60");
@@ -789,7 +807,10 @@ export function SquatCoachApp() {
     };
   }, [clearSensorProbeTimeout, handleMotion]);
 
-  async function shareResult() {
+  async function shareResult(background: ShareImageBackground) {
+    setShareDialogOpen(false);
+    setIsSharing(true);
+
     try {
       // 칼로리 계산 (반복수 × 0.6 kcal)
       const calories = Math.round(count * 0.6 * 10) / 10;
@@ -801,6 +822,7 @@ export function SquatCoachApp() {
         calories: calories,
         totalDays: workoutSummary.totalDays,
         totalReps: workoutSummary.totalReps,
+        background,
       });
 
       const shareImageFile = new File([shareImageBlob], "squat-coach-record.png", {
@@ -831,6 +853,8 @@ export function SquatCoachApp() {
       URL.revokeObjectURL(url);
     } catch (error) {
       console.error("Share failed:", error);
+    } finally {
+      setIsSharing(false);
     }
   }
 
@@ -1254,6 +1278,33 @@ export function SquatCoachApp() {
               </AlertDialogContent>
             </AlertDialog>
 
+            <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>공유 배경 선택</DialogTitle>
+                  <DialogDescription>공유할 이미지 배경을 골라주세요.</DialogDescription>
+                </DialogHeader>
+                <div className="grid grid-cols-2 gap-3">
+                  {shareBackgroundOptions.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      className="flex min-w-0 flex-col gap-2 rounded-xl border border-border bg-background p-2 text-left outline-none transition-colors hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
+                      onClick={() => void shareResult(option.id)}
+                      disabled={isSharing}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="aspect-square rounded-lg bg-cover bg-center"
+                        style={{ backgroundImage: `url(${option.imageSrc})` }}
+                      />
+                      <span className="text-center text-sm font-medium text-foreground">{option.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </DialogContent>
+            </Dialog>
+
             {phase === "complete" && (
               <div className="flex min-h-[calc(100svh-8rem)] flex-col justify-between gap-7 p-6">
                 <div className="flex flex-1 flex-col items-center justify-center gap-7 text-center">
@@ -1296,9 +1347,9 @@ export function SquatCoachApp() {
                     <RotateCcwIcon data-icon="inline-start" />
                     다시 하기
                   </Button>
-                  <Button type="button" className="rounded-full" onClick={shareResult}>
+                  <Button type="button" className="rounded-full" onClick={() => setShareDialogOpen(true)} disabled={isSharing}>
                     <Share2Icon data-icon="inline-start" />
-                    공유
+                    {isSharing ? "공유 중" : "공유"}
                   </Button>
                 </div>
               </div>

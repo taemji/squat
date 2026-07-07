@@ -9,16 +9,23 @@ interface ShareImageProps {
   calories: number;
   totalDays?: number;
   totalReps?: number;
+  background?: ShareImageBackground;
 }
 
 const CANVAS_SIZE = 1920;
+export type ShareImageBackground = "workout-bg" | "workout-bg2";
 
-function loadBackgroundImage() {
+const shareImageBackgroundSrc: Record<ShareImageBackground, string> = {
+  "workout-bg": "/workout-bg.png",
+  "workout-bg2": "/workout-bg2",
+};
+
+function loadBackgroundImage(background: ShareImageBackground) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const backgroundImg = new Image();
     backgroundImg.onload = () => resolve(backgroundImg);
     backgroundImg.onerror = reject;
-    backgroundImg.src = `/workout-bg.png?v=${Date.now()}`;
+    backgroundImg.src = `${shareImageBackgroundSrc[background]}?v=${Date.now()}`;
   });
 }
 
@@ -29,13 +36,13 @@ function getCanvasFontFamily() {
 }
 
 export async function generateShareImage(props: ShareImageProps): Promise<Blob> {
-  const { todayReps, todayTime, calories, totalDays = -1, totalReps = -1 } = props;
+  const { todayReps, todayTime, calories, totalDays = -1, totalReps = -1, background = "workout-bg" } = props;
 
   let backgroundImg: HTMLImageElement | null = null;
   const canvas = document.createElement("canvas");
 
   try {
-    backgroundImg = await loadBackgroundImage();
+    backgroundImg = await loadBackgroundImage(background);
   } catch {
     backgroundImg = null;
   }
@@ -106,11 +113,17 @@ export async function generateShareImage(props: ShareImageProps): Promise<Blob> 
   ctx.font = font(900, 58);
   ctx.fillText("S", 122, 173);
 
-  const today = new Date().toLocaleDateString("ko-KR", {
+  const now = new Date();
+  const today = now.toLocaleDateString("ko-KR", {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
   }).replace(/\. /g, ".").replace(/\.$/, "");
+  const currentTime = now.toLocaleTimeString("ko-KR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
 
   ctx.textAlign = "right";
   ctx.fillStyle = mutedWhite;
@@ -119,6 +132,9 @@ export async function generateShareImage(props: ShareImageProps): Promise<Blob> 
   ctx.fillStyle = white;
   ctx.font = font(700, 52);
   ctx.fillText(today, 1830, 230);
+  ctx.fillStyle = mutedWhite;
+  ctx.font = font(600, 40);
+  ctx.fillText(currentTime, 1830, 284);
 
   ctx.textAlign = "left";
   ctx.fillStyle = white;
