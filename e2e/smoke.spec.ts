@@ -5,13 +5,13 @@ test("home page loads", async ({ page }) => {
   await expect(page).toHaveTitle("Squat Coach");
   await expect(page.getByRole("heading", { name: "Squat Coach" })).toBeVisible();
   await expect(page.getByText("오늘 루틴을 설정해요")).toBeVisible();
-  await expect(page.getByLabel("세트 수")).toHaveValue("5");
-  await expect(page.getByLabel("세트당 개수")).toHaveValue("20");
+  await expect(page.getByLabel("세트 수")).toHaveValue("4");
+  await expect(page.getByLabel("세트당 개수")).toHaveValue("30");
   await expect(page.getByLabel("휴식 시간(초)")).toHaveValue("60");
   await expect(page.getByLabel("휴식 시간(초)")).toBeEnabled();
-  await expect(page.getByText("5세트 x 20개 · 휴식 60초")).toBeVisible();
+  await expect(page.getByText("4세트 x 30개 · 휴식 60초")).toBeVisible();
   await expect(page.getByRole("button", { name: /시작하기/ })).toBeVisible();
-  await expect(page.getByText("100")).toBeVisible();
+  await expect(page.getByText("120")).toBeVisible();
 });
 
 test("page shows the cumulative chart between the calendar and start button", async ({ page }) => {
