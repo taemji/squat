@@ -241,10 +241,10 @@ export function SquatCoachApp() {
   const [, setLastMove] = useState<"ready" | "squat" | "cheer">("ready");
   const [sensorStatus, setSensorStatus] = useState<SensorStatus>("idle");
   const [sensorAlertOpen, setSensorAlertOpen] = useState(false);
-  const [, setMotionLevel] = useState(0);
-  const [, setMotionStage] = useState<MotionStage>("steady");
-  const [, setIsCalibrating] = useState(false);
-  const [, setCalibrationProgress] = useState(0);
+  const [motionLevel, setMotionLevel] = useState(0);
+  const [motionStage, setMotionStage] = useState<MotionStage>("steady");
+  const [isCalibrating, setIsCalibrating] = useState(false);
+  const [calibrationProgress, setCalibrationProgress] = useState(0);
   const [countdownValue, setCountdownValue] = useState<3 | 2 | 1 | 0>(3);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const gravityBaselineRef = useRef<MotionVector | null>(null);
@@ -297,6 +297,17 @@ export function SquatCoachApp() {
   const workoutPlanText = isGoalValid
     ? `${normalizedSetCount}세트 x ${normalizedRepsPerSet}개 · ${restTimeText}`
     : "입력을 확인해 주세요";
+  const motionStageText = isCalibrating
+    ? `기준 자세 측정 ${calibrationProgress}%`
+    : sensorStatus === "listening"
+      ? motionStage === "descending"
+        ? "내려가는 중"
+        : motionStage === "bottom"
+          ? "바닥 확인"
+          : motionStage === "rising"
+            ? "올라오는 중"
+            : "선 자세에서 시작하세요"
+      : getSensorButtonLabel(sensorStatus);
   const resultText = useMemo(
     () => `오늘 스쿼트 ${count}개 완료! 목표 ${workoutGoal}개 중 ${progress}% 달성했어요. 운동 시간 ${elapsedTimeText}.`,
     [count, elapsedTimeText, progress, workoutGoal]
@@ -607,6 +618,8 @@ export function SquatCoachApp() {
     hasReceivedMotionSampleRef.current = false;
 
     if (!("DeviceMotionEvent" in window)) {
+      isCalibratingRef.current = false;
+      setIsCalibrating(false);
       setSensorStatus("unsupported");
       setSensorAlertOpen(true);
       return;
@@ -619,6 +632,8 @@ export function SquatCoachApp() {
         const permission = await DeviceMotion.requestPermission();
 
         if (permission !== "granted") {
+          isCalibratingRef.current = false;
+          setIsCalibrating(false);
           setSensorStatus("blocked");
           setSensorAlertOpen(true);
           return;
@@ -638,6 +653,8 @@ export function SquatCoachApp() {
           return;
         }
 
+        isCalibratingRef.current = false;
+        setIsCalibrating(false);
         setSensorStatus("unavailable");
 
         if (showSignalAlert) {
@@ -645,6 +662,8 @@ export function SquatCoachApp() {
         }
       }, sensorProbeTimeoutMs);
     } catch {
+      isCalibratingRef.current = false;
+      setIsCalibrating(false);
       setSensorStatus("blocked");
       setSensorAlertOpen(true);
     }
@@ -1078,7 +1097,7 @@ export function SquatCoachApp() {
 
                   <div className="flex flex-col items-center gap-3">
                     <p className="text-sm font-medium text-[var(--coach-ink)]">곧 시작합니다</p>
-                    <p className="max-w-xs text-sm text-muted-foreground">폰을 가슴 앞에 들고 발을 어깨너비로 맞춰주세요.</p>
+                    <p className="max-w-xs text-sm text-muted-foreground">폰을 가슴 앞에 세워 두 손으로 고정하고, 카운트다운 동안 선 자세를 유지해 주세요.</p>
                   </div>
                 </div>
 
@@ -1134,6 +1153,18 @@ export function SquatCoachApp() {
                         <p className="mt-2 text-sm text-muted-foreground">{workoutRepsPerSet} reps</p>
                         <p className="mt-1 text-xs text-muted-foreground">누적 {count}/{workoutGoal}</p>
                       </div>
+                    </div>
+                  </div>
+                  <div className="w-full rounded-2xl bg-[var(--coach-surface)] px-4 py-3" aria-live="polite">
+                    <div className="flex items-center justify-between gap-3 text-xs font-medium">
+                      <span className="text-[var(--coach-ink)]">{motionStageText}</span>
+                      <span className="text-muted-foreground">감도 {motionLevel}%</span>
+                    </div>
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--coach-panel)]" aria-hidden="true">
+                      <div
+                        className="h-full rounded-full bg-[var(--coach-accent)] transition-[width] duration-100"
+                        style={{ width: `${isCalibrating ? calibrationProgress : motionLevel}%` }}
+                      />
                     </div>
                   </div>
                 </div>

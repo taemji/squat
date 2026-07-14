@@ -73,6 +73,8 @@ $env:LAN_IP="192.168.1.167"; bun run dev:https
 3. `standing -> down -> bottom -> rising -> standing` 상태 머신으로 움직임을 추적합니다.
 4. 충분한 깊이에 도달한 뒤 다시 선 자세 근처로 돌아오면 1회로 카운트합니다.
 
+폰은 세로로 가슴 앞에 두 손으로 고정하는 것을 권장합니다. 시작 카운트다운 동안 선 자세에서 폰을 움직이지 않아야 기준 중력 방향을 정확히 측정할 수 있습니다. 운동 중 손목만 꺾거나 폰을 크게 회전시키면 수직 움직임 신호가 약해질 수 있으므로, 폰과 상체가 함께 내려갔다 올라오도록 유지합니다.
+
 모션 판정 로직은 [lib/squat-motion.ts](./lib/squat-motion.ts)에 있고, 관련 테스트는 [lib/squat-motion.test.ts](./lib/squat-motion.test.ts)에 있습니다.
 
 ## 기록 저장

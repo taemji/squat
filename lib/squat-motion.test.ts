@@ -113,6 +113,31 @@ describe("evaluateSquatMotion", () => {
     expect(result.state).toBe("standing");
   });
 
+  it("counts a controlled squat that takes several seconds", () => {
+    const result = runMotionSequenceWithTiming([
+      { direction: null },
+      { direction: "down", score: 2.0 },
+      { direction: null, gapMs: 1400 },
+      { direction: "up", score: 1.9, gapMs: 1400 },
+      { direction: null },
+    ]);
+
+    expect(result.reps).toBe(1);
+    expect(result.state).toBe("standing");
+  });
+
+  it("does not pair motions that are too far apart", () => {
+    const result = runMotionSequenceWithTiming([
+      { direction: null },
+      { direction: "down", score: 2.0 },
+      { direction: "up", score: 1.9, gapMs: 5200 },
+      { direction: null },
+    ]);
+
+    expect(result.reps).toBe(0);
+    expect(result.state).toBe("standing");
+  });
+
   it("does not count when the first strong motion is upward and then downward", () => {
     const result = runMotionSequence([
       { direction: null },
@@ -203,11 +228,59 @@ describe("measurePhoneMotion", () => {
     expect(result.directions).toEqual(["down", null, "up"]);
   });
 
+  it("stays quiet when the phone rotates while remaining still", () => {
+    const result = runPhoneMotionSequence({ x: 0, y: 0, z: 9.81 }, [
+      { x: 0.86, y: 0, z: 9.77 },
+      { x: 1.71, y: 0, z: 9.66 },
+      { x: 2.54, y: 0, z: 9.48 },
+    ]);
+
+    expect(result.directions).toEqual([null, null, null]);
+  });
+
+  it("detects vertical motion after the grip angle changes", () => {
+    let tracker = createPhoneMotionTracker({ x: 0, y: 0, z: 9.81 });
+    let timestamp = 0;
+
+    for (let step = 1; step <= 15; step += 1) {
+      const angle = (15 * step / 15) * Math.PI / 180;
+      timestamp += 80;
+      tracker = measurePhoneMotion(tracker, {
+        x: Math.sin(angle) * 9.81,
+        y: 0,
+        z: Math.cos(angle) * 9.81,
+      }, timestamp).tracker;
+    }
+
+    const result = [
+      { x: 2.95, y: 0, z: 11.01 },
+      { x: 2.54, y: 0, z: 9.48 },
+      { x: 2.13, y: 0, z: 7.94 },
+    ].map((sample) => {
+      timestamp += 80;
+      const measured = measurePhoneMotion(tracker, sample, timestamp);
+      tracker = measured.tracker;
+      return measured.sample.direction;
+    });
+
+    expect(result).toEqual(["down", null, "up"]);
+  });
+
   it("ignores sideways shaking in landscape grip", () => {
     const result = runPhoneMotionSequence({ x: 9.81, y: 0, z: 0 }, [
       { x: 9.81, y: 0.8, z: 0.1 },
       { x: 9.81, y: 0, z: 0 },
       { x: 9.81, y: -0.8, z: 0.1 },
+    ]);
+
+    expect(result.directions).toEqual([null, null, null]);
+  });
+
+  it("ignores a strong sideways shake", () => {
+    const result = runPhoneMotionSequence({ x: 9.81, y: 0, z: 0 }, [
+      { x: 9.81, y: 4, z: 0 },
+      { x: 9.81, y: 0, z: 0 },
+      { x: 9.81, y: -4, z: 0 },
     ]);
 
     expect(result.directions).toEqual([null, null, null]);

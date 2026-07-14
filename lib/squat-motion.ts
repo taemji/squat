@@ -9,7 +9,9 @@ export interface MotionVector {
 }
 
 export interface PhoneMotionTracker {
-  gravityBaseline: MotionVector | null;
+  gravityDirection: MotionVector | null;
+  gravityMagnitude: number;
+  usesGravity: boolean | null;
   lastTimestamp: number | null;
 }
 
@@ -23,8 +25,10 @@ const GRAVITY_MAGNITUDE = 9.81;
 const MOTION_THRESHOLD = 0.55;
 const QUIET_DRIFT_THRESHOLD = 0.18;
 const MIN_VERTICAL_ALIGNMENT = 0.55;
+const MIN_MAGNITUDE_FALLBACK_ALIGNMENT = 0.3;
+const GRAVITY_DIRECTION_SMOOTHING = 0.15;
 const MIN_DIRECTION_GAP_MS = 90;
-const MAX_REP_GAP_MS = 1800;
+const MAX_REP_GAP_MS = 5000;
 const REP_COOLDOWN_MS = 850;
 const REQUIRED_SETTLE_SAMPLES = 2;
 const RETURN_TO_START_RATIO = 0.75;
@@ -62,10 +66,32 @@ export function createSquatMotionProfile(): SquatMotionProfile {
 
 
 export function createPhoneMotionTracker(gravityBaseline: MotionVector | null = null): PhoneMotionTracker {
+  const gravityMagnitude = gravityBaseline ? vectorMagnitude(gravityBaseline) : 0;
+
   return {
-    gravityBaseline,
+    gravityDirection: gravityMagnitude > 0 ? scaleVector(gravityBaseline!, 1 / gravityMagnitude) : null,
+    gravityMagnitude,
+    usesGravity: gravityBaseline ? gravityMagnitude >= GRAVITY_MAGNITUDE * 0.4 : null,
     lastTimestamp: null,
   };
+}
+
+function vectorMagnitude(vector: MotionVector) {
+  return Math.sqrt((vector.x * vector.x) + (vector.y * vector.y) + (vector.z * vector.z));
+}
+
+function scaleVector(vector: MotionVector, scale: number): MotionVector {
+  return {
+    x: vector.x * scale,
+    y: vector.y * scale,
+    z: vector.z * scale,
+  };
+}
+
+function normalizeVector(vector: MotionVector): MotionVector | null {
+  const magnitude = vectorMagnitude(vector);
+
+  return magnitude > 0 ? scaleVector(vector, 1 / magnitude) : null;
 }
 
 export function averageMotionVector(samples: MotionVector[]): MotionVector {
@@ -86,53 +112,82 @@ export function measurePhoneMotion(
   acceleration: MotionVector,
   timestamp: number
 ): { tracker: PhoneMotionTracker; sample: PhoneMotionSample } {
-  if (!tracker.gravityBaseline) {
+  const accelerationMagnitude = vectorMagnitude(acceleration);
+
+  if (tracker.usesGravity === false) {
+    const strongestAxisMotion = [acceleration.x, acceleration.y, acceleration.z].reduce(
+      (strongest, value) => Math.abs(value) > Math.abs(strongest) ? value : strongest,
+      0
+    );
+    const score = Math.abs(strongestAxisMotion);
+
     return {
-      tracker: { ...tracker, gravityBaseline: acceleration, lastTimestamp: timestamp },
+      tracker: { ...tracker, lastTimestamp: timestamp },
+      sample: {
+        direction: score >= MOTION_THRESHOLD ? strongestAxisMotion >= 0 ? "down" : "up" : null,
+        score,
+        timestamp,
+      },
+    };
+  }
+
+  if (!tracker.gravityDirection) {
+    const gravityDirection = normalizeVector(acceleration);
+
+    return {
+      tracker: {
+        ...tracker,
+        gravityDirection,
+        gravityMagnitude: accelerationMagnitude,
+        usesGravity: accelerationMagnitude >= GRAVITY_MAGNITUDE * 0.4,
+        lastTimestamp: timestamp,
+      },
       sample: { direction: null, score: 0, timestamp },
     };
   }
 
-  const gravityBaseline = tracker.gravityBaseline;
-  const baselineMagnitude = Math.sqrt(
-    gravityBaseline.x * gravityBaseline.x + gravityBaseline.y * gravityBaseline.y + gravityBaseline.z * gravityBaseline.z
-  );
-  const delta = {
-    x: acceleration.x - gravityBaseline.x,
-    y: acceleration.y - gravityBaseline.y,
-    z: acceleration.z - gravityBaseline.z,
+  const gravityDirection = tracker.gravityDirection;
+  const projectedAcceleration = (acceleration.x * gravityDirection.x)
+    + (acceleration.y * gravityDirection.y)
+    + (acceleration.z * gravityDirection.z);
+  const signedMotion = projectedAcceleration - tracker.gravityMagnitude;
+  const perpendicularMotion = {
+    x: acceleration.x - (projectedAcceleration * gravityDirection.x),
+    y: acceleration.y - (projectedAcceleration * gravityDirection.y),
+    z: acceleration.z - (projectedAcceleration * gravityDirection.z),
   };
-  const signedMotion = baselineMagnitude >= GRAVITY_MAGNITUDE * 0.4
-    ? (() => {
-      const verticalUnit = {
-        x: gravityBaseline.x / baselineMagnitude,
-        y: gravityBaseline.y / baselineMagnitude,
-        z: gravityBaseline.z / baselineMagnitude,
-      };
-
-      return (delta.x * verticalUnit.x) + (delta.y * verticalUnit.y) + (delta.z * verticalUnit.z);
-    })()
-    : [delta.x, delta.y, delta.z].reduce((strongest, value) => Math.abs(value) > Math.abs(strongest) ? value : strongest, 0);
-  const totalMotion = Math.sqrt((delta.x * delta.x) + (delta.y * delta.y) + (delta.z * delta.z));
+  const totalMotion = Math.sqrt((signedMotion * signedMotion) + (vectorMagnitude(perpendicularMotion) ** 2));
   const verticalAlignment = totalMotion > 0 ? Math.abs(signedMotion) / totalMotion : 0;
-  const measuredMotion = baselineMagnitude >= GRAVITY_MAGNITUDE * 0.4 && verticalAlignment < MIN_VERTICAL_ALIGNMENT
-    ? 0
-    : signedMotion;
+  const magnitudeDelta = accelerationMagnitude - tracker.gravityMagnitude;
+  const orientationOnlyMotion = Math.abs(magnitudeDelta) < MOTION_THRESHOLD;
+  const canUseMagnitudeFallback = !orientationOnlyMotion
+    && verticalAlignment >= MIN_MAGNITUDE_FALLBACK_ALIGNMENT;
+  const measuredMotion = tracker.gravityMagnitude >= GRAVITY_MAGNITUDE * 0.4
+    && verticalAlignment < MIN_VERTICAL_ALIGNMENT
+    ? canUseMagnitudeFallback ? magnitudeDelta : 0
+    : Math.abs(magnitudeDelta) > Math.abs(signedMotion) ? magnitudeDelta : signedMotion;
   const score = Math.abs(measuredMotion);
   const direction = score >= MOTION_THRESHOLD
     ? measuredMotion >= 0 ? "down" : "up"
     : null;
-  const nextGravityBaseline = score <= QUIET_DRIFT_THRESHOLD
-    ? {
-      x: gravityBaseline.x * 0.98 + acceleration.x * 0.02,
-      y: gravityBaseline.y * 0.98 + acceleration.y * 0.02,
-      z: gravityBaseline.z * 0.98 + acceleration.z * 0.02,
-    }
-    : gravityBaseline;
+  const isGravityOnly = Math.abs(magnitudeDelta) <= QUIET_DRIFT_THRESHOLD;
+  const measuredDirection = normalizeVector(acceleration);
+  const nextGravityDirection = isGravityOnly && measuredDirection
+    ? normalizeVector({
+      x: gravityDirection.x * (1 - GRAVITY_DIRECTION_SMOOTHING) + measuredDirection.x * GRAVITY_DIRECTION_SMOOTHING,
+      y: gravityDirection.y * (1 - GRAVITY_DIRECTION_SMOOTHING) + measuredDirection.y * GRAVITY_DIRECTION_SMOOTHING,
+      z: gravityDirection.z * (1 - GRAVITY_DIRECTION_SMOOTHING) + measuredDirection.z * GRAVITY_DIRECTION_SMOOTHING,
+    }) ?? gravityDirection
+    : gravityDirection;
+  const nextGravityMagnitude = isGravityOnly
+    ? tracker.gravityMagnitude * 0.98 + accelerationMagnitude * 0.02
+    : tracker.gravityMagnitude;
 
   return {
     tracker: {
-      gravityBaseline: nextGravityBaseline,
+      gravityDirection: nextGravityDirection,
+      gravityMagnitude: nextGravityMagnitude,
+      usesGravity: tracker.usesGravity,
       lastTimestamp: timestamp,
     },
     sample: { direction, score, timestamp },
@@ -199,14 +254,14 @@ export function evaluateSquatMotion(
 
   if (elapsedMs > MAX_REP_GAP_MS) {
     return {
-      state: "down",
-      stage: "descending",
+      state: "standing",
+      stage: "steady",
       completedRep: false,
       profile: {
         ...nextProfile,
-        firstDirection: motion.direction,
-        firstDirectionAt: motion.timestamp,
-        outboundScore: motion.score,
+        firstDirection: null,
+        firstDirectionAt: null,
+        outboundScore: 0,
         returnScore: 0,
         settleSamples: 0,
       },

@@ -53,6 +53,8 @@ test("configured set plan drives workout and rest screen", async ({ page }) => {
   await page.getByRole("button", { name: "바로 시작" }).click();
   await expect(page.getByText("1/2 세트")).toBeVisible();
   await expect(page.getByText("1 reps")).toBeVisible();
+  await expect(page.getByText(/기준 자세 측정|선 자세에서 시작하세요|센서/)).toBeVisible();
+  await expect(page.getByText(/감도 \d+%/)).toBeVisible();
 
   await page.getByRole("button", { name: "수동 +1" }).click();
   await expect(page.getByText("휴식 중")).toBeVisible();
