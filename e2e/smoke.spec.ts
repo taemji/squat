@@ -65,6 +65,27 @@ test("configured set plan drives workout and rest screen", async ({ page }) => {
   await expect(page.getByText("2/2 세트")).toBeVisible();
 });
 
+test("manual set button completes all remaining reps at once", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("세트 수").fill("2");
+  await page.getByLabel("세트당 개수").fill("5");
+
+  await page.getByRole("button", { name: /시작하기/ }).click();
+  const sensorAlertConfirm = page.getByRole("button", { name: "확인" });
+
+  if (await sensorAlertConfirm.waitFor({ state: "visible", timeout: 1000 }).then(() => true).catch(() => false)) {
+    await sensorAlertConfirm.click();
+  }
+
+  await page.getByRole("button", { name: "바로 시작" }).click();
+  await page.getByRole("button", { name: "수동 +1" }).click();
+  await expect(page.getByText("1/5")).toBeVisible();
+
+  await page.getByRole("button", { name: "현재 세트 완료" }).click();
+  await expect(page.getByText("휴식 중")).toBeVisible();
+  await expect(page.getByText("완료 5/10개 · 50%")).toBeVisible();
+});
+
 test("share flow asks which background to use", async ({ page }) => {
   await page.goto("/");
   await page.getByLabel("세트 수").fill("1");

@@ -463,7 +463,7 @@ export function SquatCoachApp() {
     sensorProbeTimeoutRef.current = null;
   }, []);
 
-  const addSquat = useCallback((source: "manual" | "sensor" = "manual") => {
+  const addSquat = useCallback((source: "manual" | "sensor" = "manual", amount = 1) => {
     if (phaseRef.current !== "active") {
       return;
     }
@@ -480,8 +480,9 @@ export function SquatCoachApp() {
       return;
     }
 
-    const nextCount = Math.min(currentCount + 1, currentGoal);
-    const nextSetRepCount = Math.min(currentSetReps + 1, repsPerSet);
+    const safeAmount = Math.max(1, Math.floor(amount));
+    const nextCount = Math.min(currentCount + safeAmount, currentGoal);
+    const nextSetRepCount = Math.min(currentSetReps + safeAmount, repsPerSet);
 
     countRef.current = nextCount;
     setRepCountRef.current = nextSetRepCount;
@@ -533,6 +534,20 @@ export function SquatCoachApp() {
       }, 450);
     }
   }, []);
+
+  const completeCurrentSet = useCallback(() => {
+    if (phaseRef.current !== "active") {
+      return;
+    }
+
+    const remainingReps = workoutRepsPerSetRef.current - setRepCountRef.current;
+
+    if (remainingReps <= 0) {
+      return;
+    }
+
+    addSquat("manual", remainingReps);
+  }, [addSquat]);
 
   const handleMotion = useCallback((event: DeviceMotionEvent) => {
     const acceleration = event.accelerationIncludingGravity ?? event.acceleration;
@@ -1188,9 +1203,12 @@ export function SquatCoachApp() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 gap-3">
                   <Button type="button" className="rounded-full" onClick={() => addSquat()} disabled={count >= workoutGoal || setRepCount >= workoutRepsPerSet}>
                     수동 +1
+                  </Button>
+                  <Button type="button" variant="secondary" className="rounded-full" onClick={completeCurrentSet} disabled={count >= workoutGoal || setRepCount >= workoutRepsPerSet}>
+                    현재 세트 완료
                   </Button>
                   <Button
                     type="button"
